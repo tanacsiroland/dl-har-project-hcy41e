@@ -1,7 +1,6 @@
 seed: 42
 multi_seeds: [42, 123, 2025]
 data_dir: "data/raw/UCI HAR Dataset"
-baselines_json: "outputs/baselines_results.json"
 
 split:
   n_splits: 4
@@ -158,4 +157,3 @@ channel_ablations:
 outputs:
   winner_checkpoint: "outputs/checkpoints/cnn_tuned_best.pt"
   results_json: "outputs/tuning_results.json"
-  figures_dir: "outputs/figures"

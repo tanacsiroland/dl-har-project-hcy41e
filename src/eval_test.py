@@ -1,13 +1,8 @@
-"""Phase 5 single-pass evaluation on the locked 9-subject official test set.
+"""Phase 5: evaluate the four final models once on the official test subjects.
 
-Evaluates all finalized, pre-locked models from Phases 2-4 exactly once on
-the untouched test split (2,947 windows across 9 unseen subjects):
-  1. Locked Logistic Regression (C=10.0 on 72 train-fit standardized summary stats)
-  2. Locked Random Forest (300 trees, depth=None on 72 summary stats)
-  3. Phase 3 CompactCNN1D baseline checkpoint (38,054 params)
-  4. Phase 4 Locked Winner CompactCNN1D (48-96-160, k=9-5-3; 74,582 params)
-
-No hyperparameter tuning, re-selection, or test-driven edits occur here.
+Models: Logistic Regression and Random Forest (settings from Phase 2, refit on the
+16 training subjects), the Phase 3 CNN checkpoint and the Phase 4 CNN checkpoint.
+Nothing is tuned or selected here.
 """
 
 from __future__ import annotations
@@ -44,12 +39,7 @@ from src.data import (
     make_subject_disjoint_split,
 )
 from src.features import extract_window_summary_features
-from src.metrics import (
-    compute_classification_metrics,
-    save_confusion_matrices_figure,
-    save_per_class_f1_figure,
-    save_per_subject_f1_figure,
-)
+from src.metrics import compute_classification_metrics
 from src.models import build_cnn_model
 from src.torch_data import InertialWindowDataset
 from src.train_cnn import benchmark_inference_latency, count_parameters, evaluate_model
@@ -317,70 +307,10 @@ def run_final_test_evaluation(cfg: dict[str, Any], config_path: Path) -> dict[st
         ),
     }
 
-    # Save Phase 5 figures
-    figures_dir = Path(cfg["outputs"]["figures_dir"])
-    cm_fig = figures_dir / "phase5_test_confusion_matrices.png"
-    subj_fig = figures_dir / "phase5_test_per_subject_f1.png"
-    cls_fig = figures_dir / "phase5_test_per_class_f1.png"
-
-    save_confusion_matrices_figure(
-        [
-            (
-                f"LogReg (C={lr_params['C']})\n"
-                f"Test Macro-F1={lr_metrics['macro_f1']:.4f} | Acc={lr_metrics['accuracy']:.4f}",
-                lr_cm,
-            ),
-            (
-                f"Random Forest (300 trees)\n"
-                f"Test Macro-F1={rf_metrics['macro_f1']:.4f} | Acc={rf_metrics['accuracy']:.4f}",
-                rf_cm,
-            ),
-            (
-                f"CompactCNN1D (Phase 3 Baseline)\n"
-                f"Test Macro-F1={cnn_base_summary['test_metrics']['macro_f1']:.4f} | Acc={cnn_base_summary['test_metrics']['accuracy']:.4f}",
-                np.asarray(
-                    cnn_base_summary["test_metrics"]["confusion_matrix"], dtype=np.int64
-                ),
-            ),
-            (
-                f"CompactCNN1D (Phase 4 Tuned Winner)\n"
-                f"Test Macro-F1={cnn_tuned_summary['test_metrics']['macro_f1']:.4f} | Acc={cnn_tuned_summary['test_metrics']['accuracy']:.4f}",
-                np.asarray(
-                    cnn_tuned_summary["test_metrics"]["confusion_matrix"], dtype=np.int64
-                ),
-            ),
-        ],
-        output_path=cm_fig,
-        ncols=2,
-    )
-
-    save_per_subject_f1_figure(
-        {
-            "LogReg (C=10.0)": lr_metrics["per_subject"],
-            "RandomForest": rf_metrics["per_subject"],
-            "1D-CNN (Phase 3)": cnn_base_summary["test_metrics"]["per_subject"],
-            "1D-CNN (Tuned)": cnn_tuned_summary["test_metrics"]["per_subject"],
-        },
-        title="Phase 5 Locked Test Set — Per-Subject Macro-F1 (9 Unseen Subjects)",
-        output_path=subj_fig,
-    )
-
-    save_per_class_f1_figure(
-        {
-            "LogReg (C=10.0)": lr_metrics["per_class_f1"],
-            "RandomForest": rf_metrics["per_class_f1"],
-            "1D-CNN (Phase 3)": cnn_base_summary["test_metrics"]["per_class_f1"],
-            "1D-CNN (Tuned)": cnn_tuned_summary["test_metrics"]["per_class_f1"],
-        },
-        title="Phase 5 Locked Test Set — Per-Class F1 Across All 6 Activities",
-        output_path=cls_fig,
-    )
-
     elapsed = round(time.perf_counter() - t_start, 3)
     gpu_name = torch.cuda.get_device_name(0) if device.type == "cuda" else None
 
     return {
-        "status": "VERIFIED",
         "phase": "phase_5_locked_test_evaluation",
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
         "runtime_seconds": elapsed,
@@ -427,11 +357,6 @@ def run_final_test_evaluation(cfg: dict[str, Any], config_path: Path) -> dict[st
             "cnn_tuned_winner": cnn_tuned_summary,
         },
         "paired_statistical_comparisons": paired_tests,
-        "figures": [
-            str(cm_fig.as_posix()),
-            str(subj_fig.as_posix()),
-            str(cls_fig.as_posix()),
-        ],
     }
 
 
@@ -459,23 +384,24 @@ def main() -> int:
     with output_path.open("w", encoding="utf-8") as handle:
         json.dump(report, handle, indent=2)
 
-    print("=== Phase 5 Locked Test Evaluation [VERIFIED] ===")
+    test_info = report["splits"]["test"]
+    print("=== Phase 5: test evaluation ===")
     print(
-        f"Test split: {report['splits']['test']['num_windows']} windows across "
-        f"{report['splits']['test']['num_subjects']} unseen subjects {report['splits']['test']['subject_ids']}"
+        f"Test split: {test_info['num_windows']} windows from "
+        f"{test_info['num_subjects']} subjects {test_info['subject_ids']}"
     )
     for key, label in [
-        ("logistic_regression", "LogReg (C=10.0)"),
-        ("random_forest", "RandomForest (300 trees)"),
-        ("cnn_baseline", "CompactCNN1D (Phase 3 Baseline)"),
-        ("cnn_tuned_winner", "CompactCNN1D (Phase 4 Tuned Winner)"),
+        ("logistic_regression", "Logistic Regression"),
+        ("random_forest", "Random Forest"),
+        ("cnn_baseline", "CompactCNN1D (Phase 3)"),
+        ("cnn_tuned_winner", "CompactCNN1D (Phase 4, tuned)"),
     ]:
         m = report["models"][key]["test_metrics"]
         errs = report["models"][key]["total_test_errors"]
         subj = m["per_subject_summary"]
         print(
-            f"  {label:36s} | Test Macro-F1={m['macro_f1']:.4f} | "
-            f"Acc={m['accuracy']:.4f} | Errors={errs}/2947 | "
+            f"  {label:30s} | Test Macro-F1={m['macro_f1']:.4f} | "
+            f"Acc={m['accuracy']:.4f} | Errors={errs}/{test_info['num_windows']} | "
             f"Subj Mean={subj['macro_f1_mean']:.4f} (min={subj['macro_f1_min']:.4f})"
         )
     mc = report["paired_statistical_comparisons"]["tuned_cnn_vs_logreg"]

@@ -1,10 +1,10 @@
-"""Phase 4 systematic HPO, 5-fold GroupCV verification, and controlled ablations.
+"""Phase 4: hyperparameter search, 5-fold GroupCV, seed check and channel ablation.
 
-Evaluates 1D-CNN candidates strictly on the subject-disjoint validation split
-and 5-fold StratifiedGroupKFold cross-validation across the 21 official training
-subjects, runs channel ablations (9ch vs 6ch dynamic vs 6ch raw IMU) and
-multi-seed stability checks on the selected winner, and locks the final model
-checkpoint for Phase 5. The 9 official test subjects remain untouched.
+1. Train every candidate on the 16/5 train/validation split.
+2. Run 5-fold StratifiedGroupKFold on the 21 training subjects for a shortlist.
+3. Pick the winner by mean CV Macro-F1, save its checkpoint and rerun it with 3 seeds.
+4. Repeat the winner's CV with fewer input channels.
+Test data is not loaded here.
 """
 
 from __future__ import annotations
@@ -32,13 +32,7 @@ from src.data import (
     make_subject_disjoint_split,
     resolve_channel_indices,
 )
-from src.metrics import (
-    compute_classification_metrics,
-    save_ablation_figure,
-    save_confusion_matrices_figure,
-    save_training_curves_figure,
-    save_tuning_comparison_figure,
-)
+from src.metrics import compute_classification_metrics
 from src.train_cnn import run_single_training
 
 
@@ -312,66 +306,10 @@ def run_tuning_pipeline(cfg: dict[str, Any], config_path: Path) -> dict[str, Any
             }
         )
 
-    # Build comparison chart combining Phase 2 baselines + Phase 4 CV shortlist
-    chart_rows: list[dict[str, Any]] = []
-    baselines_path = Path(cfg.get("baselines_json", ""))
-    if baselines_path.is_file():
-        with baselines_path.open("r", encoding="utf-8") as handle:
-            b_data = json.load(handle)
-        lr_m = b_data["models"]["logistic_regression"]
-        rf_m = b_data["models"]["random_forest"]
-        chart_rows.append(
-            {
-                "label": f"LogReg (C={lr_m['best_on_val']['params']['C']})",
-                "val0_macro_f1": lr_m["best_on_val"]["val_metrics"]["macro_f1"],
-                "cv_macro_f1_mean": lr_m["group_cv_5fold"]["fold_macro_f1_mean"],
-                "cv_macro_f1_std": lr_m["group_cv_5fold"]["fold_macro_f1_std"],
-            }
-        )
-        chart_rows.append(
-            {
-                "label": "RandomForest (300 trees)",
-                "val0_macro_f1": rf_m["best_on_val"]["val_metrics"]["macro_f1"],
-                "cv_macro_f1_mean": rf_m["group_cv_5fold"]["fold_macro_f1_mean"],
-                "cv_macro_f1_std": rf_m["group_cv_5fold"]["fold_macro_f1_std"],
-            }
-        )
-    chart_rows.extend(cv_evaluations)
-
-    figures_dir = Path(out_cfg["figures_dir"])
-    comp_fig = figures_dir / "phase4_hpo_comparison.png"
-    abl_fig = figures_dir / "phase4_channel_ablation.png"
-    curves_fig = figures_dir / "phase4_tuned_cnn_curves.png"
-    cm_fig = figures_dir / "phase4_tuned_cnn_val_cm.png"
-
-    save_tuning_comparison_figure(chart_rows, comp_fig)
-    save_ablation_figure(
-        ablation_rows,
-        title=f"Phase 4 Channel Ablation (5-Fold GroupCV — {winner_cand['label']})",
-        output_path=abl_fig,
-    )
-    save_training_curves_figure(
-        winner_primary["history"],
-        best_epoch=winner_primary["best_epoch"],
-        title=f"Locked Tuned Winner: {winner_cand['label']} (Val Macro-F1={winner_primary['val_metrics']['macro_f1']:.4f} @ Ep {winner_primary['best_epoch']})",
-        output_path=curves_fig,
-    )
-    save_confusion_matrices_figure(
-        [
-            (
-                f"{winner_cand['label']} (val, ep={winner_primary['best_epoch']})\n"
-                f"Macro-F1={winner_primary['val_metrics']['macro_f1']:.4f}",
-                np.asarray(winner_primary["val_metrics"]["confusion_matrix"], dtype=np.int64),
-            )
-        ],
-        output_path=cm_fig,
-    )
-
     elapsed = round(time.perf_counter() - t_start, 3)
     gpu_name = torch.cuda.get_device_name(0) if device.type == "cuda" else None
 
     return {
-        "status": "VERIFIED",
         "phase": "phase_4_tuning_and_ablations",
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
         "runtime_seconds": elapsed,
@@ -417,6 +355,7 @@ def run_tuning_pipeline(cfg: dict[str, Any], config_path: Path) -> dict[str, Any
             "inference_latency_ms": winner_primary["inference_latency_ms"],
             "group_cv_5fold": winner_cv,
             "primary_split_best_epoch": winner_primary["best_epoch"],
+            "primary_split_history": winner_primary["history"],
             "primary_split_train_metrics": winner_primary["train_metrics"],
             "primary_split_val_metrics": winner_primary["val_metrics"],
             "multi_seed_val_stability": {
@@ -426,12 +365,6 @@ def run_tuning_pipeline(cfg: dict[str, Any], config_path: Path) -> dict[str, Any
             },
         },
         "stage4_channel_ablations": ablation_rows,
-        "figures": [
-            str(comp_fig.as_posix()),
-            str(abl_fig.as_posix()),
-            str(curves_fig.as_posix()),
-            str(cm_fig.as_posix()),
-        ],
     }
 
 
@@ -462,7 +395,7 @@ def main() -> int:
     winner = report["locked_winner"]
     w_cv = winner["group_cv_5fold"]
     w_ms = winner["multi_seed_val_stability"]
-    print("=== Phase 4 Tuning, 5-Fold GroupCV & Ablations [VERIFIED] ===")
+    print("=== Phase 4: tuning, 5-fold GroupCV and ablations ===")
     print(f"Stage 1 trials evaluated on primary val: {len(report['stage1_val_trials'])}")
     for row in report["stage2_group_cv_shortlist"]:
         print(

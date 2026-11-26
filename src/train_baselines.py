@@ -1,9 +1,8 @@
-"""Train and evaluate Phase 2 classical ML baselines under subject-disjoint splits.
+"""Phase 2: Logistic Regression and Random Forest on per-window summary statistics.
 
-Evaluates Logistic Regression and Random Forest trained on leak-free per-channel
-summary statistics of the 9 raw inertial channels strictly on the validation
-split and via 5-fold StratifiedGroupKFold cross-validation across the 21 official
-training subjects. The 9 official test subjects remain completely locked.
+Hyperparameters are chosen on the validation subjects, then the chosen settings are
+checked with 5-fold StratifiedGroupKFold over the 21 training subjects.
+Test data is not loaded here.
 """
 
 from __future__ import annotations
@@ -37,11 +36,7 @@ from src.data import (
     make_subject_disjoint_split,
 )
 from src.features import extract_window_summary_features, get_summary_feature_names
-from src.metrics import (
-    compute_classification_metrics,
-    save_confusion_matrices_figure,
-    save_per_subject_f1_figure,
-)
+from src.metrics import compute_classification_metrics
 
 
 def _set_seeds(seed: int) -> None:
@@ -223,7 +218,6 @@ def run_baselines(cfg: dict[str, Any], config_path: Path) -> dict[str, Any]:
                 ),
                 "val_metrics": val_metrics,
                 "top_features": _top_features_from_logreg(pipe, feature_names),
-                "val_cm": np.asarray(val_metrics["confusion_matrix"], dtype=np.int64),
             }
 
     assert best_lr is not None
@@ -278,7 +272,6 @@ def run_baselines(cfg: dict[str, Any], config_path: Path) -> dict[str, Any]:
                 ),
                 "val_metrics": val_metrics,
                 "top_features": _top_features_from_rf(rf, feature_names),
-                "val_cm": np.asarray(val_metrics["confusion_matrix"], dtype=np.int64),
             }
 
     assert best_rf is not None
@@ -296,44 +289,8 @@ def run_baselines(cfg: dict[str, Any], config_path: Path) -> dict[str, Any]:
         ),
     )
 
-    # Save diagnostic figures for val split
-    figures_dir = Path(cfg["figures_dir"])
-    cm_fig_path = figures_dir / "phase2_baselines_val_cm.png"
-    subj_fig_path = figures_dir / "phase2_baselines_val_per_subject_f1.png"
-
-    save_confusion_matrices_figure(
-        [
-            (
-                f"LogReg (val, C={best_lr['params']['C']})\n"
-                f"Macro-F1={best_lr['val_metrics']['macro_f1']:.4f}",
-                best_lr["val_cm"],
-            ),
-            (
-                f"Random Forest (val, depth={best_rf['params']['max_depth']})\n"
-                f"Macro-F1={best_rf['val_metrics']['macro_f1']:.4f}",
-                best_rf["val_cm"],
-            ),
-        ],
-        output_path=cm_fig_path,
-    )
-    save_per_subject_f1_figure(
-        {
-            f"LogReg (C={best_lr['params']['C']})": best_lr["val_metrics"]["per_subject"],
-            f"Random Forest (depth={best_rf['params']['max_depth']})": best_rf[
-                "val_metrics"
-            ]["per_subject"],
-        },
-        title="Phase 2 Classical Baselines — Validation Per-Subject Macro-F1",
-        output_path=subj_fig_path,
-    )
-
-    # Strip non-JSON numpy array before serializing
-    best_lr_json = {k: v for k, v in best_lr.items() if k != "val_cm"}
-    best_rf_json = {k: v for k, v in best_rf.items() if k != "val_cm"}
-
     elapsed = round(time.perf_counter() - t0, 3)
     report: dict[str, Any] = {
-        "status": "VERIFIED",
         "phase": "phase_2_classical_baselines",
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
         "runtime_seconds": elapsed,
@@ -374,19 +331,15 @@ def run_baselines(cfg: dict[str, Any], config_path: Path) -> dict[str, Any]:
         "models": {
             "logistic_regression": {
                 "val_tuning_trials": lr_trials,
-                "best_on_val": best_lr_json,
+                "best_on_val": best_lr,
                 "group_cv_5fold": lr_cv,
             },
             "random_forest": {
                 "val_tuning_trials": rf_trials,
-                "best_on_val": best_rf_json,
+                "best_on_val": best_rf,
                 "group_cv_5fold": rf_cv,
             },
         },
-        "figures": [
-            str(cm_fig_path.as_posix()),
-            str(subj_fig_path.as_posix()),
-        ],
     }
     return report
 
@@ -420,7 +373,7 @@ def main() -> int:
     lr_cv = report["models"]["logistic_regression"]["group_cv_5fold"]
     rf_cv = report["models"]["random_forest"]["group_cv_5fold"]
 
-    print("=== Phase 2 Classical Baselines [VERIFIED] ===")
+    print("=== Phase 2: classical baselines ===")
     print(
         f"Split: train={report['splits']['train']['num_windows']} ({report['splits']['train']['num_subjects']} subj) | "
         f"val={report['splits']['val']['num_windows']} ({report['splits']['val']['num_subjects']} subj) | "

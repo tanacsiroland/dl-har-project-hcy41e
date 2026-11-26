@@ -1,7 +1,6 @@
 seed: 42
 data_dir: "data/raw/UCI HAR Dataset"
 output_json: "outputs/baselines_results.json"
-figures_dir: "outputs/figures"
 
 split:
   n_splits: 4
