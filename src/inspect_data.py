@@ -1,10 +1,8 @@
-"""Reproducible environment and UCI HAR raw dataset audit script.
+"""Phase 1: check the Python environment and the raw UCI HAR files.
 
-Verifies the local Python/PyTorch/hardware environment and inspects
-``data/raw/UCI HAR Dataset/`` directly on disk, asserting file completeness,
-tensor shapes ``(N, C, T)``, NaN/Inf absence, class label validity, and strict
-subject disjointness between ``train`` and ``test``. Saves a verified JSON
-report to ``outputs/dataset_summary.json``.
+Checks that all files exist, the tensor shapes are (N, C, T), there are no NaN/Inf
+values, the labels are valid and no subject is in both train and test.
+Writes the summary to outputs/dataset_summary.json.
 """
 
 from __future__ import annotations
@@ -23,18 +21,8 @@ from typing import Any
 
 import numpy as np
 
-SIGNAL_CHANNELS: tuple[str, ...] = (
-    "body_acc_x",
-    "body_acc_y",
-    "body_acc_z",
-    "body_gyro_x",
-    "body_gyro_y",
-    "body_gyro_z",
-    "total_acc_x",
-    "total_acc_y",
-    "total_acc_z",
-)
-EXPECTED_TIMESTEPS = 128
+from src.data import EXPECTED_TIMESTEPS, SIGNAL_CHANNELS
+
 EXPECTED_FEATURE_DIM = 561
 EXPECTED_TOTAL_SUBJECTS = 30
 REQUIRED_ROOT_FILES: tuple[str, ...] = (
@@ -305,7 +293,6 @@ def audit_dataset(data_dir: Path, strict_env: bool = False) -> dict[str, Any]:
     elapsed = round(time.perf_counter() - t0, 3)
 
     return {
-        "status": "VERIFIED",
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
         "runtime_seconds": elapsed,
         "dataset_path": str(data_dir.as_posix()),
@@ -336,7 +323,7 @@ def _print_console_summary(report: dict[str, Any]) -> None:
     train = report["splits"]["train"]
     test = report["splits"]["test"]
 
-    print(f"=== UCI HAR Dataset Audit [{report['status']}] ===")
+    print("=== Phase 1: dataset audit ===")
     print(f"OS: {env['os']} | CPU logical cores: {env['cpu_logical_count']}")
     print(
         f"Python: {env['python_version']} ({env['python_executable']}) | "

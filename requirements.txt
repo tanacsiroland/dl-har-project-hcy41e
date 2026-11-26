@@ -1,5 +1,7 @@
-torch>=2.5
-numpy>=1.26
-scikit-learn>=1.4
-pyyaml>=6.0
-matplotlib>=3.8
+# Tested with Python 3.11.9 on Windows 11.
+# For an NVIDIA GPU install torch from the CUDA 12.8 index first (see README.md).
+torch==2.11.0
+numpy==2.4.6
+scikit-learn==1.9.1
+pyyaml==6.0.4
+matplotlib==3.11.2
