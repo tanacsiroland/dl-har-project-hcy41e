@@ -74,7 +74,7 @@ Table: 1. táblázat. A 9 bemeneti csatorna.
 
 ## 3.2. Az adatok ellenőrzése
 
-A `src/inspect_data.py` szkript minden fájlt beolvasott és ellenőrzött. Nincs hiányzó vagy végtelen érték, és nincs két teljesen azonos ablak. A hivatalos tanítórészben 7 352 ablak van 21 személytől, a tesztrészben 2 947 ablak 9 személytől, és egyetlen személy sem szerepel mindkettőben. Egy személyre 281–409 ablak jut. A 2. táblázat az osztályok eloszlását mutatja.
+A `src/phases/inspect_data.py` szkript minden fájlt beolvasott és ellenőrzött. Nincs hiányzó vagy végtelen érték, és nincs két teljesen azonos ablak. A hivatalos tanítórészben 7 352 ablak van 21 személytől, a tesztrészben 2 947 ablak 9 személytől, és egyetlen személy sem szerepel mindkettőben. Egy személyre 281–409 ablak jut. A 2. táblázat az osztályok eloszlását mutatja.
 
 Table: 2. táblázat. Az ablakok száma tevékenységenként.
 
@@ -107,11 +107,11 @@ Table: 3. táblázat. A kód lépései.
 
 | Fázis | Szkript | Feladat | Eredményfájl |
 |--------|----------------------------------|------------------------|----------------------------------|
-| 1. | `src/inspect_data.py` | adatok ellenőrzése | `dataset_summary.json` |
-| 2. | `src/train_baselines.py` | klasszikus modellek | `baselines_results.json` |
-| 3. | `src/train_cnn.py` | alap 1D-CNN | `cnn_baseline_results.json` |
-| 4. | `src/tune_cnn.py` | hangolás, elhagyásos vizsgálat | `tuning_results.json` |
-| 5. | `src/eval_test.py` | egyszeri tesztkiértékelés | `final_test_results.json` |
+| 1. | `src/phases/inspect_data.py` | adatok ellenőrzése | `dataset_summary.json` |
+| 2. | `src/phases/train_baselines.py` | klasszikus modellek | `baselines_results.json` |
+| 3. | `src/phases/train_cnn.py` | alap 1D-CNN | `cnn_baseline_results.json` |
+| 4. | `src/phases/tune_cnn.py` | hangolás, elhagyásos vizsgálat | `tuning_results.json` |
+| 5. | `src/phases/eval_test.py` | egyszeri tesztkiértékelés | `final_test_results.json` |
 
 ## 4.2. Klasszikus modellek
 
@@ -206,7 +206,7 @@ Az eredmény alátámasztja a H2 hipotézist. Gravitációt tartalmazó jel nél
 
 ## 6.1. Eredmények
 
-A négy kiválasztott modell egyetlen alkalommal futott le a 9 tesztszemély 2 947 ablakán (`src/eval_test.py`). A klasszikus modellek a 2. fázisban kiválasztott beállításokkal tanultak újra a 16 tanítószemélyen. A hálók súlyai a mentett fájlokból töltődtek be, és a szkript ellenőrizte, hogy a mentett standardizálás valóban csak a tanítóadatból készült. A 8. táblázat az eredményeket mutatja.
+A négy kiválasztott modell egyetlen alkalommal futott le a 9 tesztszemély 2 947 ablakán (`src/phases/eval_test.py`). A klasszikus modellek a 2. fázisban kiválasztott beállításokkal tanultak újra a 16 tanítószemélyen. A hálók súlyai a mentett fájlokból töltődtek be, és a szkript ellenőrizte, hogy a mentett standardizálás valóban csak a tanítóadatból készült. A 8. táblázat az eredményeket mutatja.
 
 Table: 8. táblázat. Eredmények a teszthalmazon (9 személy, 2 947 ablak).
 
@@ -283,7 +283,7 @@ Az ülés és az állás jobb szétválasztására két irány kínálkozik. Az 
 
 ## 7.5. Reprodukálhatóság
 
-Minden lépés egy paranccsal futtatható (a parancsokat a `README.md` sorolja fel). A beállítások a `configs` mappa YAML fájljaiban vannak, minden eredmény az `outputs` mappa JSON fájljaiba kerül, az ábrákat pedig a `src/make_figures.py` rajzolja meg ezekből a fájlokból. A dokumentációban szereplő minden szám ezekből a fájlokból származik.
+A teljes folyamat egyetlen paranccsal futtatható (`python -m src.run_all`), és az egyes fázisok külön is indíthatók (a parancsokat a `README.md` sorolja fel). A beállítások a `configs` mappa YAML fájljaiban vannak, minden eredmény az `outputs` mappa JSON fájljaiba kerül, az ábrákat pedig a `src/phases/make_figures.py` rajzolja meg ezekből a fájlokból. A dokumentációban szereplő minden szám ezekből a fájlokból származik.
 
 # 8. Irodalomjegyzék
 

@@ -9,17 +9,12 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
-import platform
-import random
-import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import numpy as np
-import sklearn
 import yaml
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
@@ -27,7 +22,7 @@ from sklearn.model_selection import StratifiedGroupKFold
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
-from src.data import (
+from src.core.data import (
     ACTIVITY_NAMES,
     DatasetSplit,
     assert_subject_disjointness,
@@ -35,13 +30,9 @@ from src.data import (
     load_subject_ids,
     make_subject_disjoint_split,
 )
-from src.features import extract_window_summary_features, get_summary_feature_names
-from src.metrics import compute_classification_metrics
-
-
-def _set_seeds(seed: int) -> None:
-    random.seed(seed)
-    np.random.seed(seed)
+from src.core.env import collect_runtime_metadata, set_seeds
+from src.core.features import extract_window_summary_features, get_summary_feature_names
+from src.core.metrics import compute_classification_metrics
 
 
 def _build_logreg_pipeline(c_val: float, max_iter: int, seed: int) -> Pipeline:
@@ -161,7 +152,7 @@ def run_baselines(cfg: dict[str, Any], config_path: Path) -> dict[str, Any]:
     """Execute Phase 2 classical ML baselines strictly on validation and group CV."""
     t0 = time.perf_counter()
     seed = int(cfg["seed"])
-    _set_seeds(seed)
+    set_seeds(seed, use_torch=False)
 
     data_dir = Path(cfg["data_dir"])
     locked_test_subjects = load_subject_ids(data_dir, "test")
@@ -297,17 +288,7 @@ def run_baselines(cfg: dict[str, Any], config_path: Path) -> dict[str, Any]:
         "config_path": str(config_path.as_posix()),
         "seed": seed,
         "test_set_status": "LOCKED_UNTOUCHED",
-        "environment": {
-            "os": platform.platform(),
-            "python_version": platform.python_version(),
-            "python_executable": sys.executable,
-            "cpu_logical_count": os.cpu_count(),
-            "packages": {
-                "numpy": np.__version__,
-                "scikit-learn": sklearn.__version__,
-                "pyyaml": yaml.__version__,
-            },
-        },
+        "environment": collect_runtime_metadata(include_torch=False, include_sklearn=True),
         "splits": {
             "train": {
                 "num_windows": int(len(train_split.y)),

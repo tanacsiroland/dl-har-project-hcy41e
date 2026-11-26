@@ -6,7 +6,7 @@ from collections.abc import Sequence
 
 import numpy as np
 
-from src.data import SIGNAL_CHANNELS
+from src.core.data import SIGNAL_CHANNELS
 
 SUPPORTED_STATS: tuple[str, ...] = (
     "mean",

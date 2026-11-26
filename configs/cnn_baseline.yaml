@@ -29,5 +29,3 @@ training:
 outputs:
   checkpoint_path: "outputs/checkpoints/cnn_baseline_best.pt"
   results_json: "outputs/cnn_baseline_results.json"
-  figures_dir: "outputs/figures"
-  figure_prefix: "phase3_cnn_baseline"

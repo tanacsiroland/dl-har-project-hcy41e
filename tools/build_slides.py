@@ -1,6 +1,6 @@
 """Build docs/prezentacio.pptx: four plain slides that summarize the project.
 
-Run from the project root:  python docs/build_slides.py
+Run from the project root:  python tools/build_slides.py
 """
 
 from pathlib import Path
@@ -10,7 +10,7 @@ from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN
 from pptx.util import Inches, Pt
 
-TARGET = Path(__file__).resolve().parent / "prezentacio.pptx"
+TARGET = Path(__file__).resolve().parent.parent / "docs" / "prezentacio.pptx"
 FONT = "Times New Roman"
 BLACK = RGBColor(0, 0, 0)
 GRAY = RGBColor(0x59, 0x59, 0x59)
@@ -119,6 +119,7 @@ def add_slide_number(slide, number):
 
 
 def main() -> int:
+    TARGET.parent.mkdir(parents=True, exist_ok=True)
     prs = Presentation()
     prs.slide_width, prs.slide_height = Inches(13.333), Inches(7.5)
     blank = prs.slide_layouts[6]

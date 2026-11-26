@@ -9,11 +9,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import importlib
 import json
-import os
-import platform
-import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -21,7 +17,8 @@ from typing import Any
 
 import numpy as np
 
-from src.data import EXPECTED_TIMESTEPS, SIGNAL_CHANNELS
+from src.core.data import EXPECTED_TIMESTEPS, SIGNAL_CHANNELS
+from src.core.env import collect_environment_info
 
 EXPECTED_FEATURE_DIM = 561
 EXPECTED_TOTAL_SUBJECTS = 30
@@ -31,89 +28,6 @@ REQUIRED_ROOT_FILES: tuple[str, ...] = (
     "features_info.txt",
     "README.txt",
 )
-
-
-def _get_package_version(import_name: str) -> str | None:
-    try:
-        mod = importlib.import_module(import_name)
-    except ImportError:
-        return None
-    return str(getattr(mod, "__version__", "installed"))
-
-
-def collect_environment_info(strict_env: bool = False) -> dict[str, Any]:
-    """Collect OS, Python, package, and GPU/CUDA runtime details."""
-    packages = {
-        "torch": _get_package_version("torch"),
-        "numpy": _get_package_version("numpy"),
-        "scikit-learn": _get_package_version("sklearn"),
-        "pyyaml": _get_package_version("yaml"),
-        "matplotlib": _get_package_version("matplotlib"),
-    }
-
-    missing = [name for name, ver in packages.items() if ver is None]
-    if strict_env and missing:
-        raise RuntimeError(
-            f"Missing required Python packages in current environment: {missing}"
-        )
-
-    cuda_info: dict[str, Any] = {
-        "torch_installed": packages["torch"] is not None,
-        "cuda_available": False,
-        "cuda_version": None,
-        "cudnn_version": None,
-        "device_count": 0,
-        "devices": [],
-        "cuda_tensor_sanity_ok": None,
-        "cuda_sanity_error": None,
-    }
-    if packages["torch"] is not None:
-        import torch
-
-        cuda_available = bool(torch.cuda.is_available())
-        cuda_info["cuda_available"] = cuda_available
-        cuda_info["cuda_version"] = torch.version.cuda
-        cuda_info["cudnn_version"] = (
-            torch.backends.cudnn.version()
-            if torch.backends.cudnn.is_available()
-            else None
-        )
-        cuda_info["device_count"] = int(torch.cuda.device_count())
-        devices = []
-        for idx in range(cuda_info["device_count"]):
-            props = torch.cuda.get_device_properties(idx)
-            devices.append(
-                {
-                    "index": idx,
-                    "name": props.name,
-                    "capability": f"{props.major}.{props.minor}",
-                    "total_memory_gb": round(props.total_memory / (1024**3), 2),
-                }
-            )
-        cuda_info["devices"] = devices
-
-        if cuda_available:
-            try:
-                x = torch.ones((2, 9, 128), device="cuda", dtype=torch.float32)
-                y = (x * 2.0).sum().item()
-                cuda_info["cuda_tensor_sanity_ok"] = bool(y == 2 * 9 * 128 * 2.0)
-            except Exception as exc:  # pragma: no cover - hardware dependent
-                cuda_info["cuda_tensor_sanity_ok"] = False
-                cuda_info["cuda_sanity_error"] = str(exc)
-
-    return {
-        "os": platform.platform(),
-        "system": platform.system(),
-        "release": platform.release(),
-        "machine": platform.machine(),
-        "python_version": platform.python_version(),
-        "python_executable": sys.executable,
-        "in_virtualenv": sys.prefix != sys.base_prefix,
-        "cpu_logical_count": os.cpu_count(),
-        "packages": packages,
-        "missing_packages": missing,
-        "cuda": cuda_info,
-    }
 
 
 def _load_activity_labels(path: Path) -> dict[int, str]:
@@ -364,7 +278,7 @@ def parse_args() -> argparse.Namespace:
         "--output",
         type=Path,
         default=Path("outputs/dataset_summary.json"),
-        help="Output JSON path for verified audit statistics.",
+        help="Output JSON path for audit statistics.",
     )
     parser.add_argument(
         "--strict-env",

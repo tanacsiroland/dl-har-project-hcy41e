@@ -22,5 +22,3 @@ Thumbs.db
 # Local notes and AI agent files (not part of the submission)
 GEMINI.md
 CONTEXT.md
-OPTIMIZATION_*.md
-IMPLEMENTATION_LOG.md

@@ -11,9 +11,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
-import platform
-import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -24,7 +21,7 @@ import torch
 import yaml
 from sklearn.model_selection import StratifiedGroupKFold
 
-from src.data import (
+from src.core.data import (
     DatasetSplit,
     assert_subject_disjointness,
     load_raw_split,
@@ -32,8 +29,9 @@ from src.data import (
     make_subject_disjoint_split,
     resolve_channel_indices,
 )
-from src.metrics import compute_classification_metrics
-from src.train_cnn import run_single_training
+from src.core.env import collect_runtime_metadata, resolve_device
+from src.core.metrics import compute_classification_metrics
+from src.core.trainer import run_single_training
 
 
 def _merge_training_cfg(default_cfg: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -116,7 +114,7 @@ def run_tuning_pipeline(cfg: dict[str, Any], config_path: Path) -> dict[str, Any
     """Execute Phase 4 HPO, 5-fold GroupCV verification, and channel ablations."""
     t_start = time.perf_counter()
     seed = int(cfg["seed"])
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = resolve_device()
 
     data_dir = Path(cfg["data_dir"])
     locked_test_subjects = load_subject_ids(data_dir, "test")
@@ -242,18 +240,22 @@ def run_tuning_pipeline(cfg: dict[str, Any], config_path: Path) -> dict[str, Any
     multi_seed_runs: list[dict[str, Any]] = []
     for s in cfg.get("multi_seeds", [42, 123, 2025]):
         s_int = int(s)
-        s_res = run_single_training(
-            train_split=train_split,
-            val_split=val_split,
-            model_cfg=winner_cand["model"],
-            train_cfg=winner_train_cfg,
-            ch_indices=all_9_indices,
-            seed=s_int,
-            device=device,
-            checkpoint_path=None,
-            aug_cfg=winner_cand.get("augmentation"),
-            compute_latency=False,
-        )
+        # Reuse winner_primary when multi_seeds includes the primary seed.
+        if s_int == seed:
+            s_res = winner_primary
+        else:
+            s_res = run_single_training(
+                train_split=train_split,
+                val_split=val_split,
+                model_cfg=winner_cand["model"],
+                train_cfg=winner_train_cfg,
+                ch_indices=all_9_indices,
+                seed=s_int,
+                device=device,
+                checkpoint_path=None,
+                aug_cfg=winner_cand.get("augmentation"),
+                compute_latency=False,
+            )
         multi_seed_runs.append(
             {
                 "seed": s_int,
@@ -307,7 +309,6 @@ def run_tuning_pipeline(cfg: dict[str, Any], config_path: Path) -> dict[str, Any
         )
 
     elapsed = round(time.perf_counter() - t_start, 3)
-    gpu_name = torch.cuda.get_device_name(0) if device.type == "cuda" else None
 
     return {
         "phase": "phase_4_tuning_and_ablations",
@@ -316,20 +317,7 @@ def run_tuning_pipeline(cfg: dict[str, Any], config_path: Path) -> dict[str, Any
         "config_path": str(config_path.as_posix()),
         "seed": seed,
         "test_set_status": "LOCKED_UNTOUCHED",
-        "environment": {
-            "os": platform.platform(),
-            "python_version": platform.python_version(),
-            "python_executable": sys.executable,
-            "cpu_logical_count": os.cpu_count(),
-            "device": str(device),
-            "gpu_name": gpu_name,
-            "packages": {
-                "torch": torch.__version__,
-                "cuda": torch.version.cuda,
-                "numpy": np.__version__,
-                "pyyaml": yaml.__version__,
-            },
-        },
+        "environment": collect_runtime_metadata(device=device, include_torch=True),
         "splits": {
             "primary_train_windows": int(len(train_split.y)),
             "primary_train_subjects": train_split.unique_subjects,

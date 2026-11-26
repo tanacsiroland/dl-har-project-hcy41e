@@ -36,44 +36,44 @@ Download *Human Activity Recognition Using Smartphones* from the [UCI Machine Le
 
 ## Running the pipeline
 
-Run from the repository root with the virtual environment active. Each phase writes a JSON file to `outputs/`.
+Run from the repository root with the virtual environment active. To execute the entire pipeline (Phases 1–5 and figure generation) with a single command:
 
 ```powershell
-python -m src.inspect_data --strict-env                        # Phase 1: data check       -> outputs/dataset_summary.json
-python -m src.train_baselines --config configs/baselines.yaml  # Phase 2: classical models -> outputs/baselines_results.json
-python -m src.train_cnn --config configs/cnn_baseline.yaml     # Phase 3: first 1D-CNN     -> outputs/cnn_baseline_results.json
-python -m src.tune_cnn --config configs/cnn_tuning.yaml        # Phase 4: tuning, ablation -> outputs/tuning_results.json (about 10 min on the GPU)
-python -m src.eval_test --config configs/final_eval.yaml       # Phase 5: test set, once   -> outputs/final_test_results.json
-python -m src.make_figures                                     # report figures from the JSON files -> docs/figures/
+python -m src.run_all --strict-env
 ```
 
-Phases 3 and 4 save the model checkpoints to `outputs/checkpoints/` and overwrite the old ones. GPU training is not bit-exact, so a rerun can give slightly different numbers.
-
-## Report and slides
-
-The report is written in Markdown (`docs/dokumentacio.md`). The Word file and the slides are built from it and from `docs/figures/`:
+Use `python -m src.run_all --figures-only` to regenerate the figures in `outputs/figures/` from existing `outputs/*.json` files without retraining. You can also run each phase individually:
 
 ```powershell
-pip install -r docs/requirements.txt
-python docs/build_docs.py     # -> docs/dokumentacio.docx
-python docs/build_slides.py   # -> docs/prezentacio.pptx
+python -m src.phases.inspect_data --strict-env                        # Phase 1: data check       -> outputs/dataset_summary.json
+python -m src.phases.train_baselines --config configs/baselines.yaml  # Phase 2: classical models -> outputs/baselines_results.json
+python -m src.phases.train_cnn --config configs/cnn_baseline.yaml     # Phase 3: first 1D-CNN     -> outputs/cnn_baseline_results.json
+python -m src.phases.tune_cnn --config configs/cnn_tuning.yaml        # Phase 4: tuning, ablation -> outputs/tuning_results.json (~10 min on GPU)
+python -m src.phases.eval_test --config configs/final_eval.yaml       # Phase 5: test set, once   -> outputs/final_test_results.json
+python -m src.phases.make_figures                                     # figures from JSON files   -> outputs/figures/
 ```
+
+Phases 3 and 4 save model checkpoints to `outputs/checkpoints/` and overwrite previous results. GPU training is not bit-exact, so a rerun can give slightly different numbers.
 
 ## Folder structure
 
 ```text
-configs/   YAML settings, one file per phase
-data/raw/  UCI HAR dataset (not in git)
-docs/      report (Markdown and Word), slides, figures, build scripts, course syllabus (PDF)
-outputs/   result JSON files and model checkpoints (not in git)
-src/       one script per phase, plus data.py, features.py, metrics.py, torch_data.py and models/
+configs/       YAML settings, one file per phase
+data/raw/      UCI HAR dataset (not in git)
+docs/          report (dokumentacio.docx), slides (prezentacio.pptx), course syllabus (PDF)
+outputs/       result JSON files, model checkpoints, and generated figures (not in git)
+src/
+  run_all.py   single-command end-to-end pipeline runner
+  core/        reusable data splitting, datasets, features, metrics, env, and trainer modules
+  models/      1D-CNN architectures (CompactCNN1D, CompactResCNN1D)
+  phases/      one CLI script per pipeline phase
 ```
 
 ## Evaluation rules
 
-- No person appears in more than one of the train, validation and test sets. The code checks this (`src/data.py`).
+- No person appears in more than one of the train, validation and test sets. The code checks this (`src/core/data.py`).
 - Scalers and channel statistics are fitted on the training people only.
-- Hyperparameters and checkpoints are chosen on the validation people and with 5-fold cross-validation over the 21 training people. The test set is evaluated once, in `src/eval_test.py`.
+- Hyperparameters and checkpoints are chosen on the validation people and with 5-fold cross-validation over the 21 training people. The test set is evaluated once, in `src/phases/eval_test.py`.
 
 ## License
 

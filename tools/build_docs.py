@@ -1,7 +1,7 @@
-"""Build docs/dokumentacio.docx from docs/dokumentacio.md with pandoc.
+"""Build docs/dokumentacio.docx from tools/report_source/dokumentacio.md with pandoc.
 
-Run from the project root:  python docs/build_docs.py
-Needs the packages in docs/requirements.txt (pypandoc_binary ships its own pandoc).
+Run from the project root:  python tools/build_docs.py
+Needs the packages in tools/requirements.txt (pypandoc_binary ships its own pandoc).
 """
 
 import subprocess
@@ -17,8 +17,10 @@ from docx.oxml.ns import qn
 from docx.shared import Cm, Pt, RGBColor
 from docx.text.paragraph import Paragraph
 
-DOCS_DIR = Path(__file__).resolve().parent
-SOURCE = DOCS_DIR / "dokumentacio.md"
+ROOT = Path(__file__).resolve().parent.parent
+REPORT_DIR = ROOT / "tools" / "report_source"
+DOCS_DIR = ROOT / "docs"
+SOURCE = REPORT_DIR / "dokumentacio.md"
 TARGET = DOCS_DIR / "dokumentacio.docx"
 FONT = "Times New Roman"
 BLACK = RGBColor(0, 0, 0)
@@ -140,6 +142,7 @@ def format_references(doc) -> None:
 
 
 def main() -> int:
+    TARGET.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as tmp:
         reference = Path(tmp) / "reference.docx"
         make_reference_docx(reference)
@@ -147,7 +150,7 @@ def main() -> int:
             str(SOURCE),
             "docx",
             outputfile=str(TARGET),
-            extra_args=[f"--reference-doc={reference}", f"--resource-path={DOCS_DIR}"],
+            extra_args=[f"--reference-doc={reference}", f"--resource-path={REPORT_DIR}"],
         )
     doc = Document(str(TARGET))
     format_tables(doc)

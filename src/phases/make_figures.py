@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 from matplotlib.ticker import FuncFormatter, MultipleLocator  # noqa: E402
 
-from src.data import ACTIVITY_NAMES  # noqa: E402
+from src.core.data import ACTIVITY_NAMES  # noqa: E402
 
 CLASS_LABELS = {
     "WALKING": "Séta",
@@ -207,7 +207,7 @@ def plot_grouped_bars(
 def main() -> int:
     parser = argparse.ArgumentParser(description="Draw report figures from outputs/*.json.")
     parser.add_argument("--results-dir", type=Path, default=Path("outputs"))
-    parser.add_argument("--figures-dir", type=Path, default=Path("docs/figures"))
+    parser.add_argument("--figures-dir", type=Path, default=Path("outputs/figures"))
     args = parser.parse_args()
 
     baselines = load_json(args.results_dir / "baselines_results.json")
@@ -250,7 +250,7 @@ def main() -> int:
     plot_channel_ablation(tuning["stage4_channel_ablations"], out / "channel_ablation.png")
 
     winner = tuning["locked_winner"]
-    if "primary_split_history" in winner:  # only saved by runs after the code cleanup
+    if "primary_split_history" in winner:
         plot_training_curves(
             winner["primary_split_history"],
             winner["primary_split_best_epoch"],

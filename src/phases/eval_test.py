@@ -9,18 +9,12 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
-import os
-import platform
-import random
-import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import numpy as np
-import sklearn
 import torch
 import yaml
 from sklearn.ensemble import RandomForestClassifier
@@ -30,7 +24,7 @@ from sklearn.preprocessing import StandardScaler
 from torch import nn
 from torch.utils.data import DataLoader
 
-from src.data import (
+from src.core.data import (
     ACTIVITY_NAMES,
     apply_channel_standardizer,
     assert_subject_disjointness,
@@ -38,17 +32,16 @@ from src.data import (
     load_raw_split,
     make_subject_disjoint_split,
 )
-from src.features import extract_window_summary_features
-from src.metrics import compute_classification_metrics
+from src.core.datasets import InertialWindowDataset
+from src.core.env import collect_runtime_metadata, resolve_device, set_seeds
+from src.core.features import extract_window_summary_features
+from src.core.metrics import compute_classification_metrics, mcnemar_comparison
+from src.core.trainer import (
+    benchmark_inference_latency,
+    count_parameters,
+    evaluate_model,
+)
 from src.models import build_cnn_model
-from src.torch_data import InertialWindowDataset
-from src.train_cnn import benchmark_inference_latency, count_parameters, evaluate_model
-
-
-def _set_seeds(seed: int) -> None:
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
 
 
 def _extract_top_confusions(
@@ -72,42 +65,6 @@ def _extract_top_confusions(
             )
     pairs.sort(key=lambda r: r["count"], reverse=True)
     return pairs[:top_k]
-
-
-def _mcnemar_comparison(
-    y_true: np.ndarray,
-    preds_a: np.ndarray,
-    preds_b: np.ndarray,
-) -> dict[str, Any]:
-    """Paired McNemar test comparing correctness of model A vs model B on test."""
-    correct_a = preds_a == y_true
-    correct_b = preds_b == y_true
-    n_10 = int(np.sum(correct_a & ~correct_b))  # A right, B wrong
-    n_01 = int(np.sum(~correct_a & correct_b))  # A wrong, B right
-    n_discordant = n_10 + n_01
-
-    if n_discordant == 0:
-        p_value = 1.0
-        chi2_cc = 0.0
-    else:
-        # Exact binomial two-sided p-value in log-space to avoid float underflow.
-        k = min(n_10, n_01)
-        log_half_n = -n_discordant * math.log(2.0)
-        log_n_fact = math.lgamma(n_discordant + 1)
-        tail = sum(
-            math.exp(log_n_fact - math.lgamma(i + 1) - math.lgamma(n_discordant - i + 1) + log_half_n)
-            for i in range(k + 1)
-        )
-        p_value = min(1.0, 2.0 * tail)
-        chi2_cc = ((abs(n_10 - n_01) - 1.0) ** 2) / n_discordant
-
-    return {
-        "a_correct_b_wrong": n_10,
-        "a_wrong_b_correct": n_01,
-        "discordant_total": n_discordant,
-        "chi2_continuity_corrected": round(float(chi2_cc), 4),
-        "exact_two_sided_p_value": float(p_value),
-    }
 
 
 def _evaluate_cnn_checkpoint(
@@ -148,7 +105,8 @@ def _evaluate_cnn_checkpoint(
     ).to(device)
     model.load_state_dict(ckpt["model_state_dict"])
 
-    criterion = nn.CrossEntropyLoss()
+    label_smoothing = float(ckpt.get("training_config", {}).get("label_smoothing", 0.0))
+    criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
     t_inf0 = time.perf_counter()
     eval_res = evaluate_model(
         model,
@@ -184,8 +142,8 @@ def run_final_test_evaluation(cfg: dict[str, Any], config_path: Path) -> dict[st
     """Run single locked test-set evaluation across all finalized models."""
     t_start = time.perf_counter()
     seed = int(cfg["seed"])
-    _set_seeds(seed)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    set_seeds(seed, deterministic_cuda=False)
+    device = resolve_device()
 
     data_dir = Path(cfg["data_dir"])
     full_train = load_raw_split(data_dir, "train")
@@ -294,21 +252,20 @@ def run_final_test_evaluation(cfg: dict[str, Any], config_path: Path) -> dict[st
         device=device,
     )
 
-    # Paired McNemar statistical comparisons on the 2,947 test windows
+    # Paired McNemar statistical comparisons on test windows
     paired_tests = {
-        "tuned_cnn_vs_logreg": _mcnemar_comparison(
+        "tuned_cnn_vs_logreg": mcnemar_comparison(
             test_split.y, cnn_tuned_preds, lr_preds
         ),
-        "tuned_cnn_vs_random_forest": _mcnemar_comparison(
+        "tuned_cnn_vs_random_forest": mcnemar_comparison(
             test_split.y, cnn_tuned_preds, rf_preds
         ),
-        "tuned_cnn_vs_baseline_cnn": _mcnemar_comparison(
+        "tuned_cnn_vs_baseline_cnn": mcnemar_comparison(
             test_split.y, cnn_tuned_preds, cnn_base_preds
         ),
     }
 
     elapsed = round(time.perf_counter() - t_start, 3)
-    gpu_name = torch.cuda.get_device_name(0) if device.type == "cuda" else None
 
     return {
         "phase": "phase_5_locked_test_evaluation",
@@ -317,21 +274,9 @@ def run_final_test_evaluation(cfg: dict[str, Any], config_path: Path) -> dict[st
         "config_path": str(config_path.as_posix()),
         "seed": seed,
         "test_set_protocol": "SINGLE_LOCKED_PASS_NO_TUNING_ON_TEST",
-        "environment": {
-            "os": platform.platform(),
-            "python_version": platform.python_version(),
-            "python_executable": sys.executable,
-            "cpu_logical_count": os.cpu_count(),
-            "device": str(device),
-            "gpu_name": gpu_name,
-            "packages": {
-                "torch": torch.__version__,
-                "cuda": torch.version.cuda,
-                "numpy": np.__version__,
-                "scikit-learn": sklearn.__version__,
-                "pyyaml": yaml.__version__,
-            },
-        },
+        "environment": collect_runtime_metadata(
+            device=device, include_torch=True, include_sklearn=True
+        ),
         "splits": {
             "train": {
                 "num_windows": int(len(train_split.y)),
