@@ -1,0 +1,161 @@
+seed: 42
+multi_seeds: [42, 123, 2025]
+data_dir: "data/raw/UCI HAR Dataset"
+baselines_json: "outputs/baselines_results.json"
+
+split:
+  n_splits: 4
+  val_fold: 0
+  cv_folds: 5
+
+default_training:
+  epochs: 50
+  batch_size: 64
+  optimizer: "adamw"
+  lr: 0.001
+  weight_decay: 0.0001
+  label_smoothing: 0.0
+  scheduler: "cosine"
+  early_stopping_patience: 15
+  num_workers: 0
+
+candidates:
+  - id: "cnn_baseline_ref"
+    label: "CompactCNN1D (Phase 3 ref)"
+    model:
+      name: "CompactCNN1D"
+      conv_channels: [32, 64, 128]
+      kernel_sizes: [7, 5, 3]
+      dropout: 0.3
+      use_batchnorm: true
+      head_hidden: null
+    training: {}
+    augmentation: { enabled: false }
+
+  - id: "cnn_reg_smooth"
+    label: "CompactCNN1D (reg + smooth)"
+    model:
+      name: "CompactCNN1D"
+      conv_channels: [32, 64, 128]
+      kernel_sizes: [7, 5, 3]
+      dropout: 0.4
+      use_batchnorm: true
+      head_hidden: null
+    training:
+      lr: 0.0008
+      weight_decay: 0.001
+      label_smoothing: 0.05
+    augmentation: { enabled: false }
+
+  - id: "cnn_aug"
+    label: "CompactCNN1D (+ train aug)"
+    model:
+      name: "CompactCNN1D"
+      conv_channels: [32, 64, 128]
+      kernel_sizes: [7, 5, 3]
+      dropout: 0.3
+      use_batchnorm: true
+      head_hidden: null
+    training:
+      weight_decay: 0.0005
+      label_smoothing: 0.05
+    augmentation:
+      enabled: true
+      jitter_std: 0.03
+      scale_std: 0.08
+
+  - id: "cnn_wider_k9"
+    label: "CompactCNN1D (48-96-160, k=9-5-3)"
+    model:
+      name: "CompactCNN1D"
+      conv_channels: [48, 96, 160]
+      kernel_sizes: [9, 5, 3]
+      dropout: 0.35
+      use_batchnorm: true
+      head_hidden: null
+    training:
+      lr: 0.0008
+      weight_decay: 0.0005
+      label_smoothing: 0.05
+    augmentation: { enabled: false }
+
+  - id: "cnn_head_mlp"
+    label: "CompactCNN1D (MLP head 64)"
+    model:
+      name: "CompactCNN1D"
+      conv_channels: [32, 64, 128]
+      kernel_sizes: [7, 5, 3]
+      dropout: 0.35
+      use_batchnorm: true
+      head_hidden: 64
+    training:
+      weight_decay: 0.0005
+      label_smoothing: 0.05
+    augmentation: { enabled: false }
+
+  - id: "cnn_lr_low"
+    label: "CompactCNN1D (lr=5e-4, smooth)"
+    model:
+      name: "CompactCNN1D"
+      conv_channels: [32, 64, 128]
+      kernel_sizes: [7, 5, 3]
+      dropout: 0.35
+      use_batchnorm: true
+      head_hidden: null
+    training:
+      lr: 0.0005
+      weight_decay: 0.0005
+      label_smoothing: 0.05
+    augmentation: { enabled: false }
+
+  - id: "rescnn_base"
+    label: "CompactResCNN1D (smooth)"
+    model:
+      name: "CompactResCNN1D"
+      conv_channels: [32, 64, 128]
+      kernel_sizes: [7, 5, 3]
+      dropout: 0.3
+      block_dropout: 0.1
+      use_batchnorm: true
+      head_hidden: null
+    training:
+      weight_decay: 0.0005
+      label_smoothing: 0.05
+    augmentation: { enabled: false }
+
+  - id: "rescnn_aug"
+    label: "CompactResCNN1D (+ train aug)"
+    model:
+      name: "CompactResCNN1D"
+      conv_channels: [32, 64, 128]
+      kernel_sizes: [7, 5, 3]
+      dropout: 0.35
+      block_dropout: 0.1
+      use_batchnorm: true
+      head_hidden: null
+    training:
+      weight_decay: 0.001
+      label_smoothing: 0.05
+    augmentation:
+      enabled: true
+      jitter_std: 0.03
+      scale_std: 0.08
+
+cv_shortlist_top_k: 3
+cv_always_include: ["cnn_baseline_ref", "rescnn_base"]
+
+channel_ablations:
+  - id: "all_9ch"
+    label: "All 9 channels (Full)"
+    channels: null
+  - id: "no_gravity_6ch"
+    label: "6 ch (body_acc + body_gyro)"
+    channels: ["body_acc_x", "body_acc_y", "body_acc_z", "body_gyro_x", "body_gyro_y", "body_gyro_z"]
+  - id: "raw_imu_6ch"
+    label: "6 ch (total_acc + body_gyro)"
+    channels: ["total_acc_x", "total_acc_y", "total_acc_z", "body_gyro_x", "body_gyro_y", "body_gyro_z"]
+
+outputs:
+  winner_checkpoint: "outputs/checkpoints/cnn_tuned_best.pt"
+  results_json: "outputs/tuning_results.json"
+  figures_dir: "outputs/figures"

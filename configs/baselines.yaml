@@ -1,0 +1,31 @@
+seed: 42
+data_dir: "data/raw/UCI HAR Dataset"
+output_json: "outputs/baselines_results.json"
+figures_dir: "outputs/figures"
+
+split:
+  n_splits: 4
+  val_fold: 0
+  cv_folds: 5
+
+features:
+  stats:
+    - mean
+    - std
+    - min
+    - max
+    - median
+    - iqr
+    - rms
+    - mean_abs_diff
+
+models:
+  logistic_regression:
+    max_iter: 2000
+    c_candidates: [0.05, 0.1, 1.0, 10.0]
+  random_forest:
+    n_estimators: 300
+    candidates:
+      - { max_depth: null, min_samples_leaf: 1 }
+      - { max_depth: 16, min_samples_leaf: 1 }
+      - { max_depth: 12, min_samples_leaf: 2 }

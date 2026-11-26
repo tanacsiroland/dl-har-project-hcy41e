@@ -1,0 +1,33 @@
+seed: 42
+data_dir: "data/raw/UCI HAR Dataset"
+baselines_json: "outputs/baselines_results.json"
+
+split:
+  n_splits: 4
+  val_fold: 0
+
+channels: null  # null uses all 9 inertial channels
+
+model:
+  name: "CompactCNN1D"
+  conv_channels: [32, 64, 128]
+  kernel_sizes: [7, 5, 3]
+  dropout: 0.3
+  use_batchnorm: true
+  head_hidden: null
+
+training:
+  epochs: 60
+  batch_size: 64
+  optimizer: "adamw"
+  lr: 0.001
+  weight_decay: 0.0001
+  scheduler: "cosine"
+  early_stopping_patience: 15
+  num_workers: 0
+
+outputs:
+  checkpoint_path: "outputs/checkpoints/cnn_baseline_best.pt"
+  results_json: "outputs/cnn_baseline_results.json"
+  figures_dir: "outputs/figures"
+  figure_prefix: "phase3_cnn_baseline"

@@ -1,0 +1,17 @@
+seed: 42
+data_dir: "data/raw/UCI HAR Dataset"
+baselines_results: "outputs/baselines_results.json"
+cnn_baseline_results: "outputs/cnn_baseline_results.json"
+tuning_results: "outputs/tuning_results.json"
+
+split:
+  n_splits: 4
+  val_fold: 0
+
+locked_models:
+  cnn_baseline_checkpoint: "outputs/checkpoints/cnn_baseline_best.pt"
+  cnn_tuned_checkpoint: "outputs/checkpoints/cnn_tuned_best.pt"
+
+outputs:
+  results_json: "outputs/final_test_results.json"
+  figures_dir: "outputs/figures"
