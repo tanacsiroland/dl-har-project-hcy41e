@@ -1,0 +1,4 @@
+# Only needed to rebuild docs/dokumentacio.docx and docs/prezentacio.pptx.
+pypandoc_binary==1.17
+python-docx==1.2.0
+python-pptx==1.0.2

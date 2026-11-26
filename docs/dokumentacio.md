@@ -1,252 +1,300 @@
-# Okostelefonos emberi aktivitásfelismerés (HAR) alany-diszjunkt kiértékeléssel és kompakt 1D-CNN architektúrával
-
-**Tantárgy:** Mély gépi tanulás (`NSXMG1HMLF`)  
-**Intézmény:** Óbudai Egyetem — Kiberfizikai Rendszerek Intézet  
-**Tárgyfelelős / Oktató:** Dr. habil. Dineva Adrienn  
-**Szerző:** Tanácsi Roland (Neptun: `HCY41E`) — egyéni projektmunka  
-**Félév:** 2026/27/1 (levelező tagozat)  
-**Dátum:** 2026. november 25.  
-
+---
+title: "Emberi tevékenységek felismerése okostelefon-szenzorjelekből kis méretű 1D konvolúciós hálóval"
+subtitle: "Mély gépi tanulás (NSXMG1HMLF), projektmunka"
+author: "Tanácsi Roland (Neptun-kód: HCY41E)"
+lang: hu-HU
 ---
 
-## Vezetői összefoglaló
+::: {custom-style="Author"}
+Óbudai Egyetem, Kiberfizikai Rendszerek Intézet
+:::
 
-A projekt célja egy **nulláról (from scratch) tanított, kompakt PyTorch 1D konvolúciós neurális hálózat (1D-CNN)** és klasszikus gépi tanulási baseline modellek (**Logisztikus Regresszió**, **Random Forest**) szigorúan tudományos, adat-szivárgásmentes összehasonlítása okostelefonos inerciális szenzorjeleken (UCI HAR adatkészlet, `10 299` ablak, `9` csatorna × `128` időlépés `50 Hz`-en).
+::: {custom-style="Author"}
+Oktató: Dr. habil. Dineva Adrienn
+:::
 
-Minden kísérlet **szigorúan alany-diszjunkt (`subject-disjoint`)** felosztás mellett zajlott (`16` tanuló-, `5` validációs és `9` lezárt tesztalany, plusz `5`-szörös `StratifiedGroupKFold` keresztvalidáció a `21` tanulóalanyon). A skálázók és statisztikák kizárólag a tanulóhalmazon kerültek illesztésre, és a `9` tesztalanyból álló `2 947` ablakos hivatalos teszthalmaz kizárólag **egyetlen alkalommal**, a végső modellek lezárása után került kiértékelésre.
+::: {custom-style="Author"}
+2026/27. tanév, 1. félév, levelező tagozat
+:::
 
-A végleges teszteredmények igazolják, hogy a hangolt **`CompactCNN1D (48-96-160, k=9-5-3)`** (`74 582` tanítható paraméter, `0,30 ms` GPU / `0,39 ms` CPU ablakonkénti késleltetés) **`0,9283` Macro-F1** (`92,70%` pontosság) értéket ér el a látatlan tesztalanyokon — szignifikánsan felülmúlva mind a Logisztikus Regressziót (`0,9024`, párosított McNemar $p = 4{,}31 \cdot 10^{-5}$), mind a látatlan alanyokon túltanuló Random Forest modellt (`0,8428`, $p = 1{,}61 \cdot 10^{-34}$). A kontrollált csatorna-abláció egyúttal bizonyította, hogy a gravitációs gyorsulási komponens (`total_acc`) elhagyása drasztikusan rontja a statikus testhelyzetek (`LAYING` $1{,}000 \rightarrow 0{,}866$) szeparációját.
+::: {custom-style="Author"}
+2026\. november 26.
+:::
 
----
+```{=openxml}
+<w:p><w:r><w:br w:type="page"/></w:r></w:p>
+```
 
-## 1. Szakirodalmi áttekintés
+# Összefoglaló
 
-A viselhető szenzorokon és okostelefonokon alapuló emberi aktivitásfelismerés (*Human Activity Recognition*, HAR) kulcsfontosságú részterülete a pervasív számítástechnikának, az egészségmonitorozásnak és a kiberfizikai rendszereknek. A korai okostelefonos megközelítések — köztük a jelen munka alapjául szolgáló adatkészletet bemutató **Anguita et al. (2012, 2013)** publikációk — a gyorsulásmérő és a giroszkóp háromtengelyű idősoraiból csúszóablakos szegmentálás után több száz kézzel tervezett idő- és frekvenciatartományú statisztikát (átlag, szórás, entrópia, energia, FFT-sávok) számítottak ki, majd azokra klasszikus osztályozókat (például többosztályos SVM-et vagy döntési fákat) illesztettek. Bár ezek a módszerek alacsony számítási igényűek és jól értelmezhetők, teljesítményük erősen függ a szakértői jellemzőtervezéstől, és globális ablakstatisztikákba sűrítve elveszítik a mozgásciklusok finom időbeli fázisszerkezetét.
+A projekt azt vizsgálta, hogy egy kis méretű, nulláról tanított egydimenziós konvolúciós neurális háló (1D-CNN) jobban felismeri-e az emberi tevékenységeket okostelefon-szenzorjelekből, mint két klasszikus gépi tanulási modell. Az alapot az UCI HAR adatkészlet nyers gyorsulásmérő- és giroszkópjelei adták: 10 299 jelablak, 30 személy, 6 tevékenység. Az adatfelosztás személyek szerint történt, így a tesztszemélyek egyetlen ablaka sem szerepelt a tanításban. A tesztkiértékelés csak a legvégén, egyetlen alkalommal futott le.
 
-A mélytanulás elterjedésével (**Bishop, 2023; Prince, 2024**) a kétdimenziós képfeldolgozásból ismert konvolúciós elv az egyváltozós és többcsatornás idősorokra is sikeresen átültetésre került az idődimenzió mentén eltolásinvariáns lokális szűrők segítségével. **Ronao és Cho (2016)** az elsők között igazolták az okostelefonos HAR területén, hogy a többcsatornás idősorokra alkalmazott 1D konvolúciós neurális hálózatok (*1D-CNN*) képesek közvetlenül a nyers gyorsulás- és szögsebesség-jelekből hierarchikus, időbeli és szenzorok közötti reprezentációkat tanulni, felülmúlva a klasszikus kézi jellemzőkészletekre épülő modelleket. **Ignatov (2018)** tovább finomította ezt az irányt: megmutatta, hogy már egy sekély, valós idejű mobil inferenciára méretezett 1D-CNN architektúra is képes hatékonyan kinyerni a lokális mozgásmotívumokat, különösen ha a lokális konvolúciós mintázatokat globális idősor-eloszlási információkkal kombináljuk.
+A hangolt 1D-CNN a 9 tesztszemélyen 0,928 makro-F1 értéket ért el (pontosság: 92,7%). A logisztikus regresszió 0,902-t, a véletlen erdő 0,843-at ért el. A háló előnye mindkét klasszikus modellel szemben szignifikáns (McNemar-próba). Mozgással járó tevékenységeknél sokkal jobb, az ülés és az állás szétválasztásában viszont gyengébb a logisztikus regressziónál. Egy elhagyásos vizsgálat azt is megmutatta, hogy a gravitációt tartalmazó gyorsulásjel nélkül a fekvés felismerése jelentősen romlik.
 
-A szakirodalom ugyanakkor rávilágít két gyakori módszertani buktatóra is. Egyrészt az átfedő csúszóablakok (például 50%-os átfedés) véletlenszerű ablak-szintű szétválasztása (*random window split*) ugyanazon alany szomszédos ablakait juttatja a tanító- és teszthalmazba, ami irreálisan felfújt pontosságot eredményez. Ezért a megbízható mobil HAR-értékelés alapfeltétele a szigorú **alany-diszjunkt (*subject-independent*)** kiértékelés. Másrészt a nyers gyorsulásjelekben lévő alacsony frekvenciás gravitációs összetevő eltávolítása ugyan segíti a dinamikus járásmintázatok elemzését, de elrejti a készülék statikus térbeli orientációját, amely a nyugalmi testhelyzetek (`SITTING`, `STANDING`, `LAYING`) megkülönböztetéséhez elengedhetetlen. Jelen projekt kifejezetten e két aspektust vizsgálja reprodukálható, lezárt teszthalmazos protokoll mellett.
+# 1. Szakirodalmi áttekintés
 
----
+Az emberi tevékenységek felismerése (Human Activity Recognition, HAR) azt jelenti, hogy egy rendszer szenzorjelekből automatikusan megállapítja, mit csinál éppen egy ember: sétál, ül, fekszik vagy lépcsőzik. Ilyen rendszerek segítik például az egészségügyi megfigyelést és a mozgáskövető alkalmazásokat. Az okostelefonok erre kényelmes eszközök, mert gyorsulásmérőt és giroszkópot is tartalmaznak.
 
-## 2. Problémafelvetés és kutatási hipotézisek
+A korai okostelefonos megoldások két lépésben dolgoztak. Először a jeleket rövid ablakokra vágták, és minden ablakból sok, kézzel kitalált jellemzőt számoltak (például átlagot, szórást, energiát, frekvenciasávokat). Ezután ezekre a jellemzőkre klasszikus osztályozót tanítottak. Anguita és munkatársai [1] például egy telefonra tervezett, kis számításigényű, többosztályos tartóvektor-gépet (SVM) mutattak be. A projekt adatkészletét is ők tették közzé [2], 561 előre kiszámolt jellemzővel együtt. Ezek a módszerek gyorsak és jól értelmezhetők, de az eredményük azon múlik, mennyire jók a kiválasztott jellemzők. Az ablakszintű statisztikák ráadásul elveszítik a jel időbeli alakját, például a lépések ritmusát.
 
-### 2.1. A megoldandó feladat és kontextus
+A konvolúciós neurális hálók [3], [4] mindkét problémán segítenek. Egy konvolúciós szűrő egy rövid mintát keres, és ugyanaz a szűrő végigcsúszik a jel teljes hosszán. A háló így maga tanulja meg, milyen rövid időbeli minták fontosak. Ronao és Cho [5] okostelefonos adatokon megmutatta, hogy a nyers jelekre tanított 1D-CNN jobb eredményt ad, mint a kézzel tervezett jellemzőkre épülő modellek. Ignatov [6] egy sekély, valós idejű futtatásra szánt 1D-CNN-t mutatott be, amelyet egyszerű statisztikai jellemzőkkel is kiegészített.
 
-Adott egy derékra rögzített okostelefon 3 tengelyű gyorsulásmérőjéből és 3 tengelyű giroszkópjából `50 Hz` mintavételezéssel nyert, `2,56` másodperces (`T = 128` minta), `9` csatornás időablak $\mathbf{X}_i \in \mathbb{R}^{9 \times 128}$. A feladat az ablakhoz tartozó $y_i \in \{1,\dots,6\}$ emberi aktivitási osztály (`WALKING`, `WALKING_UPSTAIRS`, `WALKING_DOWNSTAIRS`, `SITTING`, `STANDING`, `LAYING`) automatikus felismerése olyan korábban **nem látott személyeken**, akiknek egyetlen mintája sem szerepelt a tanításban vagy a modellválasztásban. A gyakorlati cél egy olyan kompakt neurális architektúra megalkotása, amely beágyazott/mobil környezetben is szub-milliszekundumos késleltetéssel futtatható, nem támaszkodik külső előtanított alapmodellekre, és pontosan összevethető a klasszikus összegző statisztikás modellekkel.
+Két buktató befolyásolta a tervezést. Az első az értékelés módja. Az ablakok 50%-ban átfedik egymást, ezért véletlenszerű ablakfelosztásnál ugyanannak a személynek szinte azonos ablakai kerülnek a tanító- és a teszthalmazba. Ez túl jó, félrevezető eredményt ad. Ezért az adatfelosztás személyek szerint történt. A második a gravitáció szerepe. A gyorsulásjel lassú, gravitációs része mutatja meg, hogyan dől a telefon. Ha ez a rész kimarad, a mozgások jobban látszanak, de a nyugalmi testhelyzetek (ülés, állás, fekvés) nehezebben különíthetők el. Ezt a hatást egy külön kísérlet mérte meg.
 
-### 2.2. Kutatási kérdés (RQ) és hipotézisek
+# 2. Problémafelvetés
 
-- **Kutatási kérdés (RQ):** Szigorúan alany-diszjunkt kiértékelés mellett képes-e egy nulláról tanított, kompakt PyTorch 1D-CNN nyers `(9, 128)` szenzorablakokon magasabb Macro-F1 értéket elérni látatlan alanyokon, mint az ugyanazon `9` csatornából kiszámított ablakstatisztikákra illesztett klasszikus gépi tanulási alapmodellek (`Logistic Regression`, `Random Forest`) — és mely tevékenységeknél vagy alanyoknál jelentkeznek a fennmaradó hibák?
-- **Elsődleges hipotézis ($H_1$):** A lokális temporális konvolúciós szűrők megőrzik a lépésciklusok hullámformáját és a csatornák közötti fázisviszonyokat a `2,56 s`-os ablakban, ezért a 1D-CNN szignifikánsan jobb látatlan-alany Macro-F1 eredményt ér el a klasszikus statisztikai modelleknél (különösen a dinamikus lokomóciós osztályokban), miközben kompakt (`< 100k` paraméter) marad.
-- **Nullhipotézis ($H_0$):** A globális csatorna-statisztikák tartalmazzák a szeparációhoz szükséges összes információt, így a 1D-CNN nem nyújt érdemi Macro-F1 előnyt a látatlan tesztalanyokon, vagy túltanulja a tanulóalanyok egyedi járásmintázatait.
-- **Csatorna-ablációs hipotézis ($H_2$):** A teljes gyorsulási csatorna (`total_acc_xyz`, amely tartalmazza a gravitációs komponenst) elhagyása és a pusztán gravitáció-mentesített jelek (`body_acc_xyz + body_gyro_xyz`) használata drasztikusan rontja a statikus testhelyzetek (`SITTING`, `STANDING`, `LAYING`) felismerését.
+## 2.1. A feladat
 
-### 2.3. Mérési elvek
+A bemenet egy 2,56 másodperces jelablak, amelyet egy derékra erősített okostelefon mért 50 Hz-es mintavétellel. Az ablak 9 csatornát és csatornánként 128 mintát tartalmaz, vagyis egy 9 × 128-as mátrix. A kimenet a hat tevékenység egyike: séta, lépcsőn fel, lépcsőn le, ülés, állás, fekvés. A modellnek olyan személyeken is jól kell működnie, akiktől a tanítás és a modellválasztás során egyetlen ablakot sem látott. Gyakorlati cél volt, hogy a háló kicsi maradjon (100 000 paraméter alatt), ne használjon előtanított modellt, és pontosan összevethető legyen a klasszikus modellekkel.
 
-Mivel a hat osztály enyhén kiegyensúlyozatlan (a legkisebb és legnagyobb osztály aránya `986 / 1407 = 0,701` a tanulóhalmazon), az elsődleges döntési és modellválasztási metrika a **Macro-F1**, kiegészítve az összpontossággal (*Accuracy*), az osztályonkénti F1-értékekkel, a `6×6`-os konfúziós mátrixokkal és az alanyonkénti Macro-F1 eloszlással.
+## 2.2. Kutatási kérdés és hipotézisek
 
----
+Kutatási kérdés: személyek szerinti felosztás mellett jobb makro-F1 értéket ér-e el egy nulláról tanított, kis 1D-CNN a nyers jeleken, mint az ugyanabból a 9 csatornából számolt ablakstatisztikákra tanított klasszikus modellek? Melyik tevékenységeknél és melyik személyeknél maradnak hibák?
 
-## 3. Adatkészlet eredete, struktúrája és auditja
+- H1: A konvolúció a jel időbeli alakját is látja (lépésritmus, a csatornák egymáshoz képesti időzítése), az ablakstatisztikák viszont nem. Ezért az 1D-CNN új személyeken jobb makro-F1 értéket ér el, főleg a mozgással járó tevékenységeknél. A nullhipotézis szerint nincs érdemi különbség.
+- H2: Ha a bemenetből kimarad a teljes gyorsulásjel (amely a gravitációt is tartalmazza), és csak a gravitáció nélküli gyorsulás és a szögsebesség marad, romlik a nyugalmi testhelyzetek felismerése.
 
-### 3.1. Adatforrás és előfeldolgozási háttér
+## 2.3. Mérőszámok
 
-Az **UCI HAR Using Smartphones** adatkészlet (Anguita et al., 2013) `30` önkéntes (`19–48` év) méréseit tartalmazza, akik derékra erősített Samsung Galaxy S II készülékkel végeztek hat mindennapi tevékenységet. A beépített gyorsulásmérő és giroszkóp `50 Hz`-en rögzítette a 3 tengelyű lineáris gyorsulást (`g` egységben) és a 3 tengelyű szögsebességet (`rad/s`). A szerzők zajszűrés (mediánszűrő + 3. rendű, `20 Hz`-es aluláteresztő Butterworth szűrő) után egy `0,3 Hz`-es Butterworth aluláteresztő szűrővel szétválasztották a teljes gyorsulást (`total_acc`) gravitációs és testmozgási (`body_acc`) komponensre, majd az idősorokat `2,56 s` széles, `50%`-os átfedésű ablakokra (`128` minta/ablak) szegmentálták. A nyers idősorok mellett az eredeti adatkészlet egy `561` elemű előre számított jellemzővektort (`X_train.txt`, `X_test.txt`) is tartalmaz — jelen projektben azonban **nem** ezekre az előre kiszámított származtatott jellemzőkre támaszkodunk, hanem közvetlenül az `Inertial Signals/` könyvtár 9 nyers csatornájával dolgozunk (`body_acc_{x,y,z}`, `body_gyro_{x,y,z}`, `total_acc_{x,y,z}`).
+A fő mérőszám a makro-F1. Ez az osztályonként számolt F1-értékek egyszerű átlaga, így minden tevékenység ugyanannyit számít, akármennyi ablaka van. Az F1 a precizitás és a felidézés harmonikus közepe. A választás oka, hogy az osztályok mérete kissé eltér: a legkisebb és a legnagyobb osztály aránya a tanítóadatban 986 / 1407 = 0,70. A dokumentáció emellett közli a pontosságot (a helyesen besorolt ablakok arányát), az osztályonkénti F1-et, a tévesztési mátrixot (melyik valódi osztályt melyik osztálynak jósolta a modell) és a személyenkénti makro-F1-et.
 
-### 3.2. Reprodukálható fájlszintű és tenzor-audit (`src/inspect_data.py`)
+# 3. Az adatkészlet
 
-Az 1. fázisban elkészített `src/inspect_data.py` szkript lefutása (`outputs/dataset_summary.json`) a teljes adatkészletet közvetlenül lemezről ellenőrizte:
+## 3.1. Forrás és előfeldolgozás
 
-| Tulajdonság | Hivatalos `train` | Hivatalos `test` (lezárva az 5. fázisig) | Összesen / Megjegyzés |
-|---|---:|---:|---|
-| **Ablakok száma (`N`)** | `7 352` | `2 947` | `10 299` ablak |
-| **Nyers tenzor alak és típus** | `(7352, 9, 128)`, `float32` | `(2947, 9, 128)`, `float32` | Mind a `9` csatornafájl hiánytalan |
-| **Alanyok száma és ID-k** | `21` fő (`1,3,5,6,7,8,11,14..17,19,21..23,25..30`) | `9` fő (`2,4,9,10,12,13,18,20,24`) | `30` egyedi alany, **átfedés = 0** |
-| **Ablak / alany tartomány** | `281 – 409` ablak | `288 – 381` ablak | Kiegyensúlyozott alanyterhelés |
-| **Hiányzó / végtelen / duplikált érték** | `0` NaN, `0` Inf, `0` duplikátum | `0` NaN, `0` Inf, `0` duplikátum | Halmazok közötti duplikátum: `0` |
+Az UCI HAR adatkészletben [2] 30 önkéntes (19–48 év) szerepel, akik derékra rögzített Samsung Galaxy S II telefonnal végezték el a hat tevékenységet. A telefon gyorsulásmérője és giroszkópja 50 Hz-en mért. Az adatkészlet szerzői a jeleket zajszűrték (mediánszűrő és 20 Hz-es aluláteresztő Butterworth-szűrő), majd egy 0,3 Hz-es aluláteresztő szűrővel kettébontották a gyorsulást gravitációs és testmozgásból származó részre. Végül a jeleket 2,56 s hosszú, 50%-ban átfedő ablakokra vágták. Az adatkészlet 561 előre kiszámolt jellemzőt is tartalmaz, ezek nem szerepelnek a projektben. A modellek bemenete az `Inertial Signals` mappa 9 nyers jele (1. táblázat).
 
-Az egyes tevékenységi osztályok eloszlása az alábbi:
+Table: 1. táblázat. A 9 bemeneti csatorna.
 
-| Osztály ID és név | Hivatalos `train` db (%) | Hivatalos `test` db (%) |
-|---|---:|---:|
-| `1 — WALKING` | `1 226` (`16,68%`) | `496` (`16,83%`) |
-| `2 — WALKING_UPSTAIRS` | `1 073` (`14,59%`) | `471` (`15,98%`) |
-| `3 — WALKING_DOWNSTAIRS` | `986` (`13,41%`) | `420` (`14,25%`) |
-| `4 — SITTING` | `1 286` (`17,49%`) | `491` (`16,66%`) |
-| `5 — STANDING` | `1 374` (`18,69%`) | `532` (`18,05%`) |
-| `6 — LAYING` | `1 407` (`19,14%`) | `537` (`18,22%`) |
+| Csatorna neve a fájlokban | Magyar elnevezés | Tartalom | Mértékegység |
+|----------------------------|--------------------|------------------------------------|----------------|
+| total_acc_x/y/z | teljes gyorsulás | gyorsulás a gravitációval együtt | g |
+| body_acc_x/y/z | testgyorsulás | gyorsulás a gravitáció nélkül | g |
+| body_gyro_x/y/z | szögsebesség | a giroszkóp jele | rad/s |
 
-A csatornánkénti statisztikai audit fontos fizikai különbséget tárt fel: míg a `body_acc_*` csatornák közel zéró várható értékűek (szórás `0,107 – 0,195 g`), a `body_gyro_*` szögsebesség-jelek akár `[-5,97; +5,75] rad/s` tartományban mozognak (szórás `0,256 – 0,407 rad/s`), a `total_acc_x` átlaga pedig `0,805 g` a domináns függőleges gravitációs tengely miatt. Ez közvetlenül indokolja a csatornánkénti standardizálást — szigorúan csak a tanulóhalmazon illesztve.
+## 3.2. Az adatok ellenőrzése
 
----
+A `src/inspect_data.py` szkript minden fájlt beolvasott és ellenőrzött. Nincs hiányzó vagy végtelen érték, és nincs két teljesen azonos ablak. A hivatalos tanítórészben 7 352 ablak van 21 személytől, a tesztrészben 2 947 ablak 9 személytől, és egyetlen személy sem szerepel mindkettőben. Egy személyre 281–409 ablak jut. A 2. táblázat az osztályok eloszlását mutatja.
 
-## 4. Szivárgásmentes adatfolyam és modellarchitektúrák
+Table: 2. táblázat. Az ablakok száma tevékenységenként.
 
-### 4.1. Szubjektum-diszjunkt adatfelosztás és zéró szivárgás
+| Tevékenység (eredeti címke) | Tanítórész | Tesztrész |
+|--------------------------------------------------|------------------------:|------------------------:|
+| Séta (WALKING) | 1 226 (16,7%) | 496 (16,8%) |
+| Lépcsőn fel (WALKING_UPSTAIRS) | 1 073 (14,6%) | 471 (16,0%) |
+| Lépcsőn le (WALKING_DOWNSTAIRS) | 986 (13,4%) | 420 (14,3%) |
+| Ülés (SITTING) | 1 286 (17,5%) | 491 (16,7%) |
+| Állás (STANDING) | 1 374 (18,7%) | 532 (18,1%) |
+| Fekvés (LAYING) | 1 407 (19,1%) | 537 (18,2%) |
+| Összesen | 7 352 | 2 947 |
 
-Mivel minden egymást követő időablak 50%-ban átfedi az előzőt, az azonos alanyhoz tartozó ablakok szétválasztása azonnali adatszivárgáshoz vezetne. Ezért a `src/data.py` modul minden felosztási ponton kódszintű `assert_subject_disjointness(...)` ellenőrzést kényszerít ki:
+A csatornák nagyon különböző tartományban mozognak. A testgyorsulás szórása 0,11–0,19 g, a szögsebesség −5,97 és +5,75 rad/s között változik, a teljes gyorsulás x tengelyének átlaga pedig a gravitáció miatt 0,80 g. Ezért a háló bemenete csatornánként standardizálva van, és a standardizálás csak a tanítóadat átlagát és szórását használja.
 
-1. **Elsődleges fejlesztői felosztás:** A `21` hivatalos tanulóalany `StratifiedGroupKFold(n_splits=4, val_fold=0, seed=42)` eljárással került kettéosztásra:
-   - **`train`:** `16` alany (`[1, 3, 5, 7, 8, 14, 15, 16, 19, 22, 25, 26, 27, 28, 29, 30]`), **`5 563` ablak** (`75,67%`).
-   - **`val`:** `5` alany (`[6, 11, 17, 21, 23]`), **`1 789` ablak** (`24,33%`).
-2. **Összesített tanulóköri keresztvalidáció:** A `5`-szörös `StratifiedGroupKFold(n_splits=5, seed=42)` mind a `21` tanulóalany (`7 352` ablak) felett ellenőrzi, hogy egy hiperparaméter-választás ne kizárólag a `val_fold=0` öt alanyára hangolódjon rá.
-3. **Lezárt teszthalmaz (`test`):** A `9` tesztalany (`[2, 4, 9, 10, 12, 13, 18, 20, 24]`, `2 947` ablak) az 1–4. fázis alatt fizikailag sem került betöltésre (kizárólag a `subject_test.txt` azonosítói kerültek beolvasásra a diszjunkciós állításokhoz).
+# 4. Módszer
 
-### 4.2. Klasszikus gépi tanulási baseline modellek (`src/features.py`, `src/train_baselines.py`)
+## 4.1. Adatfelosztás
 
-A klasszikus modellek összehasonlításához minden `(9, 128)` ablakból **ablakonként függetlenül** (`axis=-1`) `8` jól értelmezhető időtartományú statisztikát számítottunk ki mind a `9` csatornára (`9 × 8 = 72` jellemző): `mean`, `std`, `min`, `max`, `median`, `iqr`, `rms`, valamint `mean_abs_diff` ($\frac{1}{T-1}\sum_t |x_{t+1}-x_t|$, a jel érdességének / frekvenciatartalmának közelítésére). A két modell:
+A felosztásnál az volt a szabály, hogy egy személy minden ablaka ugyanabba a halmazba kerül. Ezt a kód minden felosztás után ellenőrzi. A hivatalos 21 tanítószemély a `StratifiedGroupKFold` eljárással (4 részre bontva, 42-es véletlenmaggal) két csoportra oszlott:
 
-- **Logisztikus Regresszió (`LogisticRegression`):** `sklearn.pipeline.Pipeline` belsejében alkalmazott `StandardScaler`-rel (szigorúan csak az adott tanuló-foldon illesztve), a validációs Macro-F1 alapján hangolt `C ∈ {0,05; 0,1; 1,0; 10,0}` regularizációval (`max_iter=2000`).
-- **Random Forest (`RandomForestClassifier`):** `n_estimators=300` fával, `max_depth ∈ {None, 16, 12}` és `min_samples_leaf ∈ {1, 2}` jelöltek közül a validációs Macro-F1 szerint kiválasztva.
+- tanítóhalmaz: 16 személy, 5 563 ablak;
+- validációs halmaz: 5 személy (6., 11., 17., 21., 23.), 1 789 ablak.
 
-### 4.3. Nulláról tanított PyTorch 1D-CNN architektúrák (`src/models/cnn1d.py`)
+A hiperparaméterek kiválasztását ezen felül 5-szörös keresztvalidáció is segítette mind a 21 tanítószemélyen. Ilyenkor az adat öt részre oszlik, a modell mindig négy részen tanul, a mérés a kimaradt ötödiken történik, végül az öt eredmény átlaga számít. A részek itt is személyek szerint készültek. A teszthalmaz a hivatalos 9 tesztszemély (2., 4., 9., 10., 12., 13., 18., 20., 24.) 2 947 ablaka.
 
-A neurális modellek bemenete a szigorúan a tanulóhalmaz `16` alanyán illesztett `(1, 9, 1)` átlaggal és szórással standardizált $\tilde{\mathbf{X}} \in \mathbb{R}^{B \times 9 \times 128}$ nyers tenzor. Két kompakt, jól magyarázható architektúra került implementálásra nulláról:
+A teljes folyamat öt lépésből (fázisból) áll, mindegyikhez egy szkript tartozik (3. táblázat). Minden szkript egy YAML konfigurációs fájlt olvas, és az eredményét JSON fájlba menti. A tesztadatot az 1. fázis csak ellenőrzésre olvasta be, a 2–4. fázis pedig csak a tesztszemélyek azonosítóit, hogy az átfedést ellenőrizze.
 
-1. **`CompactCNN1D` (szekvenciális 1D-CNN):** Három temporális konvolúciós blokkból áll (`Conv1d → BatchNorm1d → ReLU → MaxPool1d(2)` az első két blokkban, majd a harmadik `Conv1d → BatchNorm1d → ReLU` blokk után globális átlagoló `AdaptiveAvgPool1d(1)`). A globális időbeli átlagolás megőrzi a gravitációs egyenáramú orientációt (kritikus a `SITTING/STANDING/LAYING` elkülönítéséhez), miközben eltolásinvariáns és drasztikusan csökkenti a paraméterszámot (`Dropout(p)` + lineáris kimeneti fej). A Fázis 3 alapmodell `(32, 64, 128)` csatornaszámmal és `(7, 5, 3)` kernelekkel **`38 054`**, míg a Fázis 4 hangolt változat `(48, 96, 160)` csatornaszámmal és `(9, 5, 3)` kernelekkel **`74 582`** tanítható paraméterrel rendelkezik.
-2. **`CompactResCNN1D` (reziduális 1D-CNN):** Három kétkonvolúciós reziduális blokk (`Conv1d → BN → ReLU → Dropout(0,1) → Conv1d → BN` + `1×1` projekciós átkötés) `(32, 64, 128)` szélességgel és `(7, 5, 3)` kernelekkel (**`126 278` paraméter**).
+Table: 3. táblázat. A kód lépései.
 
-### 4.4. Hardver- és szoftverkörnyezet
+| Fázis | Szkript | Feladat | Eredményfájl |
+|--------|----------------------------------|------------------------|----------------------------------|
+| 1. | `src/inspect_data.py` | adatok ellenőrzése | `dataset_summary.json` |
+| 2. | `src/train_baselines.py` | klasszikus modellek | `baselines_results.json` |
+| 3. | `src/train_cnn.py` | alap 1D-CNN | `cnn_baseline_results.json` |
+| 4. | `src/tune_cnn.py` | hangolás, elhagyásos vizsgálat | `tuning_results.json` |
+| 5. | `src/eval_test.py` | egyszeri tesztkiértékelés | `final_test_results.json` |
 
-Minden futtatás a projekt `.venv` környezetében (`Python 3.11.9`, `PyTorch 2.11.0+cu128`, `CUDA 12.8`, `cuDNN 91900`, `scikit-learn 1.9.1`, `NumPy 2.4.6`) zajlott Windows 11 Pro operációs rendszeren, `Intel Core Ultra 9 285K` (24 szál) CPU, `~63,27 GiB` RAM és `NVIDIA GeForce RTX 5090` (`31,82 GiB` VRAM, compute capability `12.0`) GPU használatával. A véletlenszám-generátorok seedelése és a `cudnn.deterministic=True` beállítás rögzítve lett, ugyanakkor a GPU/CUDA-kernelek közötti bit-szintű determinizmus nem feltételezett.
+## 4.2. Klasszikus modellek
 
----
+A klasszikus modellek minden ablakból, csatornánként 8 egyszerű statisztikát kaptak: átlag, szórás, minimum, maximum, medián, interkvartilis terjedelem, négyzetes középérték, valamint a szomszédos minták különbségének átlagos abszolút értéke. Ez utóbbi azt méri, mennyire gyorsan változik a jel. Ez 9 × 8 = 72 jellemző ablakonként. Minden jellemző csak a saját ablakából készül, így itt nem tud információ átszivárogni a halmazok között.
 
-## 5. Kísérletek: Baseline eredmények, hiperparaméter-optimalizálás és ablációk
+- Logisztikus regresszió: a jellemzőket a tanítóadaton illesztett standardizálás után kapta meg. A regularizáció erőssége (C) a {0,05; 0,1; 1; 10} értékek közül az lett, amelyik a legjobb validációs makro-F1-et adta (legfeljebb 2000 iterációval).
+- Véletlen erdő: 300 fa. A fák mélysége (korlát nélkül, 16, 12) és a levelek minimális mérete (1 vagy 2) ugyanígy, a validációs makro-F1 alapján dőlt el.
 
-### 5.1. Fázis 2 klasszikus baseline eredmények (csak `val` és 5-fold GroupCV)
+## 4.3. Az 1D-CNN
 
-A `src/train_baselines.py` futtatása (`configs/baselines.yaml`, `7,90 s`) az alábbi eredményeket adta a `72` összegző statisztikán:
+A háló három konvolúciós blokkból áll. Minden blokkban egy konvolúciós réteg, egy batch-normalizálás (a réteg kimenetét kötegenként standardizálja) és egy ReLU aktiváció van. Az első két blokk után egy max-pooling réteg felezi az ablak hosszát. A harmadik blokk után egy átlagolás következik az időtengely mentén, így minden szűrőből egyetlen szám marad. Ez az átlag a gravitáció irányát is megőrzi, ami a nyugalmi testhelyzetekhez kell. Végül egy dropout réteg (tanítás közben véletlenszerűen kinulláz néhány értéket) és egy lineáris réteg adja a hat osztály pontszámát. A 4. táblázat a hangolt háló felépítését mutatja.
 
-| Modell | Kiválasztott paraméter (`val`) | Train Macro-F1 | Val Macro-F1 (`5` alany) | Val Acc | 5-Fold GroupCV Macro-F1 (`21` alany) |
-|---|---|---:|---:|---:|---:|
-| **Logistic Regression** | `C=10.0`, `max_iter=2000` | `0,9725` | **`0,8969`** | **`0,8994`** | **`0,8939 ± 0,0291`** |
-| **Random Forest** | `n=300`, `max_depth=None` | `1,0000` | `0,8908` | `0,8983` | `0,8774 ± 0,0410` |
+Table: 4. táblázat. A hangolt 1D-CNN rétegei (az alakok egy ablakra vonatkoznak).
 
-![Klasszikus baseline modellek validációs konfúziós mátrixai](outputs/figures/phase2_baselines_val_cm.png)
+| Réteg | Kimenet alakja | Paraméterek |
+|--------------------------------------------------------------|--------------------|-----------------:|
+| Bemenet | 9 × 128 | 0 |
+| Konvolúció (48 szűrő, 9 hosszú), batch-normalizálás, ReLU, max-pooling | 48 × 64 | 3 984 |
+| Konvolúció (96 szűrő, 5 hosszú), batch-normalizálás, ReLU, max-pooling | 96 × 32 | 23 232 |
+| Konvolúció (160 szűrő, 3 hosszú), batch-normalizálás, ReLU | 160 × 32 | 46 400 |
+| Átlagolás az idő mentén, dropout (0,35) | 160 | 0 |
+| Lineáris kimeneti réteg | 6 | 966 |
+| Összesen | | 74 582 |
 
-A validációs hibaanalízis már ebben a fázisban világos strukturális különbséget mutatott: a **Logisztikus Regresszió** jól szeparálta a dinamikus mozgásokat (`WALKING` `0,9426`, `WALKING_DOWNSTAIRS` `0,9066`), de `104 / 325` `SITTING` ablakot `STANDING`-nek tévesztett (`SITTING` F1 `0,8022`, `6.` alany `0,7757`). Ezzel szemben a **Random Forest** tökéletesen memorizálta a tanulóhalmazt (`1,0000`), és jobban kezelte a `SITTING`/`STANDING` párost (`0,9238`/`0,9339`), viszont erősen gyengélkedett a dinamikus járási osztályokban (`WALKING_UPSTAIRS` F1 `0,7774`), a `21.` validációs alanyon `0,6022` Macro-F1-re esve vissza. A két modell legfontosabb jellemzői (`total_acc_x/y__median/mean/rms` és `body_gyro_x__mean_abs_diff`) igazolták, hogy a gravitációs dőlés és a dinamikus szögsebesség-változás a kulcsjelzők.
+Az alap 1D-CNN ugyanígy épül fel, de 32, 64 és 128 szűrővel és 7, 5, 3 hosszú szűrőkkel, összesen 38 054 paraméterrel. A 9 minta hosszú első szűrő 0,18 másodpercet lát egyszerre. A kísérletekben egy reziduális változat is szerepelt: ebben minden blokk két konvolúciós rétegből áll, és a blokk bemenete hozzáadódik a kimenetéhez. Ez 126 278 paramétert jelent.
 
-### 5.2. Fázis 3: A `CompactCNN1D` MVP teljesítménye (`val` split)
+## 4.4. Tanítás
 
-A Fázis 3 alapmodell (`configs/cnn_baseline.yaml`, `AdamW lr=1e-3`, `weight_decay=1e-4`, `dropout=0,3`, `38 054` paraméter) **`27,81 s`** alatt futott le, és a `4.` epochban érte el a legjobb validációs teljesítményt (`early_stopping_patience=15`, megállva a `19.` epochnál):
+A hálók tanítása AdamW optimalizálóval és keresztentrópia-veszteséggel, 64 ablakos kötegekben (batch) zajlott. A tanulási ráta egy koszinuszgörbe szerint csökkent 10^−5^-ig. Egy epoch a tanítóhalmaz egyszeri teljes bejárása. Minden epoch után a kód kiszámolta a validációs makro-F1-et, és a legjobb epoch súlyait tartotta meg. Ha 15 epochon át nem javult az eredmény, a tanítás leállt (korai leállítás). Az alap hálónál a tanulási ráta 10^−3^, a súlycsökkentés (weight decay) 10^−4^, a dropout 0,3 volt, legfeljebb 60 epochig. A hangolt hálónál a tanulási ráta 8 · 10^−4^, a súlycsökkentés 5 · 10^−4^, a dropout 0,35 volt, legfeljebb 50 epochig, 0,05-ös címkesimítással. Címkesimításnál a helyes osztály célértéke 1 helyett 0,958, a többi öt osztály pedig egyenként 0,008-at kap, ami csökkenti a túlzott magabiztosságot.
 
-- **Val Macro-F1: `0,9517`** (`Val Accuracy: 0,9475`) — **`+0,0548`** előrelépés a Logisztikus Regresszióhoz és **`+0,0609`** a Random Foresthez képest ugyanazon az `5` látatlan alanyon!
-- **Alanyonkénti validációs Macro-F1:** `0,9552 ± 0,0326` (mind az `5` validációs alanyon verte mindkét klasszikus baseline-t: Subj 6 `0,9513`, Subj 11 `1,0000`, Subj 17 `0,9658`, Subj 21 `0,8990`, Subj 23 `0,9597`).
-- **Osztályonkénti F1:** A dinamikus osztályok és a `LAYING` közel hibátlanok (`WALKING` `0,9914`, `WALKING_UPSTAIRS` `0,9899`, `WALKING_DOWNSTAIRS` `1,0000`, `LAYING` `1,0000`), a validációs hibák `94,7%`-a (`89 / 94` ablak) a `SITTING` ↔ `STANDING` tengelyre korlátozódott.
+A véletlenmagok rögzítettek voltak, a cuDNN determinisztikus módban futott, de GPU-n ez sem garantál bitre azonos eredményt. A futtatások Windows 11 alatt, Intel Core Ultra 9 285K processzoron és NVIDIA GeForce RTX 5090 videokártyán készültek, Python 3.11.9, PyTorch 2.11.0 (CUDA 12.8), scikit-learn 1.9.1 és NumPy 2.4.6 mellett.
 
-![Phase 3 CompactCNN1D tanulási görbék](outputs/figures/phase3_cnn_baseline_curves.png)
+# 5. Kísérletek és hangolás
 
-### 5.3. Fázis 4: Hiperparaméter-optimalizálás és 5-szörös GroupCV verifikáció
+## 5.1. Klasszikus modellek
 
-A Fázis 3 tanulási görbéje megmutatta, hogy a hálózat viszonylag gyorsan (`4.` epoch) éri el a `val` Macro-F1 csúcsát, majd a tanítás előrehaladtával enyhe alany-specifikus túltanulás lép fel. A Fázis 4-ben (`configs/cnn_tuning.yaml`, `src/tune_cnn.py`, teljes futási idő `593,63 s`) **8 tudatosan tervezett konfigurációt** vizsgáltunk meg az elsődleges `val` felosztáson, majd a legjobb jelölteket és a reziduális architektúrát **5-szörös `StratifiedGroupKFold` keresztvalidáción** vetettük össze mind a `21` tanulóalanyon:
+Az 5. táblázat a klasszikus modellek eredményét mutatja a validációs halmazon és az 5-szörös keresztvalidációban.
 
-| Konfiguráció ID | Architektúra és fő változtatás | Paraméter | Best Ep | Val0 Macro-F1 (`5` alany) | 5-Fold GroupCV Macro-F1 (`21` alany) | OOF Macro-F1 |
-|---|---|---:|---:|---:|---:|---:|
-| `cnn_baseline_ref` | `CompactCNN1D (32-64-128, k=7-5-3)` ref | `38 054` | `4` | `0,9523` | `0,9461 ± 0,0356` | `0,9479` |
-| `cnn_reg_smooth` | `dropout=0,4`, `wd=1e-3`, `ls=0,05`, `lr=8e-4` | `38 054` | `4` | `0,9491` | — | — |
-| `cnn_aug` | `+ train` zaj (`0,03`) és skálázás (`0,08`), `ls=0,05` | `38 054` | `39` | `0,9480` | — | — |
-| `cnn_head_mlp` | `+ Linear(128→64)` MLP fej, `ls=0,05` | `45 926` | `4` | `0,9511` | — | — |
-| `cnn_lr_low` | `lr=5e-4`, `dropout=0,35`, `ls=0,05` | `38 054` | `4` | `0,9471` | — | — |
-| `rescnn_base` | `CompactResCNN1D (32-64-128)`, `ls=0,05` | `126 278` | `15` | `0,9594` | `0,9482 ± 0,0312` | `0,9496` |
-| `rescnn_aug` | `CompactResCNN1D + train` augmentáció, `ls=0,05` | `126 278` | `5` | `0,9590` | `0,9493 ± 0,0327` | `0,9511` |
-| **`cnn_wider_k9`** *(GYŐZTES)* | **`CompactCNN1D (48-96-160, k=9-5-3)`, `dropout=0,35`, `lr=8e-4`, `wd=5e-4`, `ls=0,05`** | **`74 582`** | **`17`** | **`0,9725`** | **`0,9563 ± 0,0332`** | **`0,9578`** |
+Table: 5. táblázat. A klasszikus modellek eredményei (72 jellemző).
 
-![Phase 4 modell-összehasonlítás az elsődleges validáción és az 5-szörös GroupCV-n](outputs/figures/phase4_hpo_comparison.png)
+| Modell | Választott beállítás | Tanító makro-F1 | Validációs makro-F1 | Validációs pontosság | Keresztvalidáció makro-F1 |
+|---------------------|-------------------|-----------:|------------:|-------------:|--------------------:|
+| Logisztikus regresszió | C = 10 | 0,972 | 0,897 | 0,899 | 0,894 ± 0,029 |
+| Véletlen erdő | korlát nélküli mélység | 1,000 | 0,891 | 0,898 | 0,877 ± 0,041 |
 
-A végső modellválasztás szigorúan az **5-szörös GroupCV átlagos Macro-F1** alapján történt: a **`CompactCNN1D (48-96-160, k=9-5-3)`** érte el a legmagasabb eredményt (`0,9563 ± 0,0332`, OOF `0,9578`), megelőzve mind a Fázis 3 alapmodellt (`0,9461`), mind a közel kétszer akkora `CompactResCNN1D` változatokat (`0,9482` / `0,9493`). A `k=9` kezdő kernel (`0,18 s` időablak) és a mérsékelt kapacitásbővítés (`48→96→160`) jobban kihasználta a `50 Hz`-es mozgási periódust, miközben a paraméterszám továbbra is kompakt maradt (`74 582`). Megjegyzendő ugyanakkor, hogy a 3 különböző seeden (`42, 123, 2025`) mért elsődleges `val` stabilitásvizsgálat **`0,9561 ± 0,0116`** szórást adott (`0,9725`, `0,9480`, `0,9479`), ami őszintén mutatja, hogy az egyes alanyok közötti validációs eredmény érzékeny az inicializációra. *(Megjegyzés: a `label_smoothing=0,05` miatt a keresztentrópia-veszteség alsó korlátja ~`0,28`-ra emelkedik, ami az optimális osztályozási teljesítmény mellett magasabb nyers veszteségértékekben jelenik meg a görbéken.)*
+A logisztikus regresszió a mozgásokat jól felismerte (séta F1: 0,94), de a 325 ülő ablakból 104-et állásnak jósolt. Ezért az ülés F1 értéke csak 0,80, a 6. személynél pedig a makro-F1 0,78. A véletlen erdő a tanítóadatot hibátlanul megtanulta (1,000), az ülést és az állást jobban szétválasztotta (0,92 és 0,93), de a lépcsőn felfelé menést gyengén ismerte fel (0,78), és a 21. személyen csak 0,60 makro-F1-et ért el. A véletlen erdő számára a legfontosabb jellemzők a teljes gyorsulás x tengelyének mediánja, négyzetes középértéke és maximuma voltak, vagyis a telefon dőlése.
 
-![A lezárt győztes modell tanulási görbéi](outputs/figures/phase4_tuned_cnn_curves.png)
+## 5.2. Az alap 1D-CNN
 
-### 5.4. Kontrollált csatorna-abláció ($H_2$ igazolása)
+Az alap háló tanítása 27,8 másodpercig tartott. A legjobb validációs eredményt a 4. epochban érte el, a korai leállítás a 19. epoch után állította meg. A validációs makro-F1 0,952 (pontosság: 0,947), ami 0,055-tel jobb a logisztikus regressziónál és 0,061-gyel jobb a véletlen erdőnél. A háló mind az öt validációs személyen jobb volt mindkét klasszikus modellnél. A 94 validációs hibából 89 az ülés és az állás felcserélése volt. Az 1. ábrán látszik, hogy a 4. epoch után a tanító értékek tovább javulnak, a validációs értékek viszont ingadoznak. A háló tehát korán elkezd a tanítószemélyek sajátosságaihoz igazodni.
 
-A `CompactCNN1D (48-96-160, k=9-5-3)` architektúrán végzett 5-szörös GroupCV csatorna-abláció eredményei közvetlenül ellenőrzik a $H_2$ hipotézist:
+![1. ábra. Az alap 1D-CNN vesztesége és makro-F1 értéke epochonként. A szaggatott vonal a legjobb (4.) epochot jelöli.](figures/cnn_baseline_curves.png){width=100%}
 
-| Csatorna-konfiguráció | Csatornák száma | 5-Fold GroupCV Macro-F1 | OOF `SITTING` F1 | OOF `STANDING` F1 | OOF `LAYING` F1 |
-|---|---:|---:|---:|---:|---:|
-| **Teljes 9 csatorna (`Full`)** | `9` | **`0,9563 ± 0,0332`** | **`0,8858`** | **`0,8970`** | **`1,0000`** |
-| **6 csatorna (`body_acc + body_gyro`, gravitáció nélkül)** | `6` | `0,9253 ± 0,0236` (`-0,0310`) | `0,8446` | `0,8869` | **`0,8664` (`-0,1336`)** |
-| **6 csatorna (`total_acc + body_gyro`, nyers hardver IMU)** | `6` | `0,9486 ± 0,0402` (`-0,0077`) | `0,8701` | `0,8902` | `0,9996` |
+## 5.3. Hiperparaméter-hangolás
 
-![Phase 4 csatorna-ablációs eredmények az 5-szörös GroupCV-n](outputs/figures/phase4_channel_ablation.png)
+Hiperparaméternek a tanítás előtt rögzített beállítások számítanak, például a tanulási ráta vagy a szűrők száma. Nyolc beállítás futott a validációs halmazon (6. táblázat). A legjobbak és a reziduális háló ezután 5-szörös keresztvalidációban is szerepeltek. A végső modell kiválasztása a keresztvalidációs átlag alapján történt, nem az egyetlen validációs halmaz alapján, mert az csak 5 személyt tartalmaz.
 
-Az eredmény **egyértelműen igazolja $H_2$-t**: ha eltávolítjuk a `total_acc` gravitációs komponenst, a hálózat képtelen megbízhatóan elkülöníteni a vízszintes fekvést (`LAYING` `1,0000 → 0,8664`) a többi nyugalmi állapottól. Érdekes további megállapítás, hogy a pusztán nyers hardveres jelekkel (`total_acc + body_gyro`, a Butterworth-szűrt `body_acc` nélkül) tanított 1D-CNN **`0,9486`** CV Macro-F1-et ér el (`LAYING` `0,9996`), vagyis a konvolúciós szűrők képesek a gyorsulásjel dinamikus komponensének jelentős részét önállóan kinyerni.
+Table: 6. táblázat. A kipróbált beállítások. Az alap háló kivételével mindegyik 0,05-ös címkesimítást és nagyobb súlycsökkentést (5 · 10^−4^ vagy 10^−3^) használt, a pontos értékek a `configs/cnn_tuning.yaml` fájlban vannak. A keresztvalidáció csak a kiválasztott négy beállításra futott.
 
----
+| Beállítás | Változtatás az alap hálóhoz képest | Paraméter | Legjobb epoch | Validációs makro-F1 | Keresztvalidáció makro-F1 |
+|------------------|--------------------------|------------:|----------:|------------:|------------------:|
+| Alap 1D-CNN | nincs | 38 054 | 4 | 0,952 | 0,946 ± 0,036 |
+| Erősebb regularizáció | dropout 0,4, súlycsökkentés 10^−3^, tanulási ráta 8 · 10^−4^ | 38 054 | 4 | 0,949 | nem futott |
+| Adatbővítés | zaj és amplitúdó-skálázás a tanító ablakokon | 38 054 | 39 | 0,948 | nem futott |
+| Kétrétegű kimenet | plusz egy 64 neuronos réteg | 45 926 | 4 | 0,951 | nem futott |
+| Kisebb tanulási ráta | 5 · 10^−4^, dropout 0,35 | 38 054 | 4 | 0,947 | nem futott |
+| Reziduális CNN | reziduális blokkok | 126 278 | 15 | 0,959 | 0,948 ± 0,031 |
+| Reziduális CNN + adatbővítés | reziduális blokkok, zaj és skálázás | 126 278 | 5 | 0,959 | 0,949 ± 0,033 |
+| Hangolt 1D-CNN | 48, 96 és 160 szűrő, az első 9 hosszú | 74 582 | 17 | 0,973 | 0,956 ± 0,033 |
 
-## 6. Végső tesztkiértékelés és hibaanalízis
+![2. ábra. A modellek makro-F1 értéke a validációs halmazon és az 5-szörös keresztvalidációban. A hibasáv a részek közötti szórás.](figures/model_comparison.png){width=100%}
 
-### 6.1. Lezárt teszteredmények (`src/eval_test.py` — `2 947` ablak, `9` látatlan alany)
+A legjobb keresztvalidációs átlagot a szélesebb, 9 hosszú első szűrőt használó háló érte el: 0,956 ± 0,033. A dokumentáció ezt nevezi hangolt 1D-CNN-nek, és a tesztelés ennek a mentett súlyait használta. A keresztvalidációban a négy háló közötti különbség (0,946–0,956) kisebb, mint a részek közötti szórás (kb. 0,03), ezért a sorrend nem biztos. A hangolt háló három különböző véletlenmaggal is lefutott a validációs halmazon: az eredmény 0,973, 0,948 és 0,948 lett, az átlag 0,956 ± 0,012. A 0,973-as validációs érték tehát részben szerencsés véletlenmagnak köszönhető. A címkesimítás miatt a hangolt háló vesztesége nem csökkenhet kb. 0,24 alá, ezért a veszteségértéke nem vethető össze közvetlenül az alap hálóéval.
 
-A 4 végleges, előre lezárt modell **egyetlen alkalommal** került lefuttatásra a hivatalos teszthalmazon (`[2, 4, 9, 10, 12, 13, 18, 20, 24]`). A teszthalmaz szubjektum-diszjunkciója és a mentett checkpoint-skálázók `train`-illesztettsége kódban igazolásra került (`runtime = 10,55 s`):
+## 5.4. Elhagyásos vizsgálat a csatornákra
 
-| Modell | Val Macro-F1 | **Teszt Macro-F1** | **Teszt Pontosság** | **Hibák (`/2947`)** | **Teszt alany-átlag ± szórás (`min – max`)** |
-|---|---:|---:|---:|---:|---|
-| **Logistic Regression** (`C=10.0`) | `0,8969` | `0,9024` | `90,36%` | `284` | `0,8958 ± 0,0673` (`0,7327 – 0,9656`) |
-| **Random Forest** (`300` fa) | `0,8908` | `0,8428` | `84,56%` | `455` | `0,8230 ± 0,1059` (`0,5640 – 0,9307`) |
-| **CompactCNN1D** (Phase 3 alapmodell) | `0,9517` | `0,9264` | `92,50%` | `221` | `0,9137 ± 0,0899` (`0,7210 – 1,0000`) |
-| **CompactCNN1D** (Phase 4 hangolt győztes) | **`0,9725`** | **`0,9283`** | **`92,70%`** | **`215`** | **`0,9158 ± 0,0925` (`0,7491 – 1,0000`)** |
+Az elhagyásos vizsgálatban a bemenet egy része kimarad, és az eredmény romlása mutatja meg, mennyit ért az a rész. A hangolt háló 5-szörös keresztvalidációval, háromféle bemenettel tanult (7. táblázat, 3. ábra). Az osztályonkénti F1 értékek az öt rész összevont előrejelzéséből származnak: így minden ablakot az a modell jósol meg, amelyik az adott ablakot nem látta tanításkor.
 
-**Párosított McNemar statisztikai próbák (a `2 947` tesztablakon):**
-- **Hangolt 1D-CNN vs. Logisztikus Regresszió:** `174` ablaknál csak a CNN helyes, `105`-nél csak a LogReg ($\chi^2 = 16,57$, egzakt kétoldali **$p = 4{,}306 \cdot 10^{-5}$**) — statisztikailag szignifikáns fölény.
-- **Hangolt 1D-CNN vs. Random Forest:** `323` vs. `83` diszkordáns ablak (**$p = 1{,}610 \cdot 10^{-34}$**) — a Random Forest súlyosan túltanulta a tanulóalanyokat (`1,0000 → 0,8428`).
-- **Hangolt 1D-CNN vs. Phase 3 Alap 1D-CNN:** `29` vs. `23` diszkordáns ablak (**$p = 0,4885$**) — a hangolt modell `6` hibával kevesebbet vét (`215` vs. `221`), de a két 1D-CNN közötti különbség a látatlan tesztalanyokon nem statisztikailag szignifikáns.
+Table: 7. táblázat. Az elhagyásos vizsgálat eredményei (5-szörös keresztvalidáció).
 
-### 6.2. Osztályonkénti és alanyonkénti hibaanalízis
+| Bemenet | Csatornák | Makro-F1 | Ülés F1 | Állás F1 | Fekvés F1 |
+|--------------------------------------|------------:|----------------:|----------:|----------:|---------:|
+| Mind a 9 csatorna | 9 | 0,956 ± 0,033 | 0,886 | 0,897 | 1,000 |
+| Testgyorsulás + szögsebesség (gravitáció nélkül) | 6 | 0,925 ± 0,024 | 0,845 | 0,887 | 0,866 |
+| Teljes gyorsulás + szögsebesség | 6 | 0,949 ± 0,040 | 0,870 | 0,890 | 1,000 |
 
-![Phase 5 teszt konfúziós mátrixok mind a négy modellen](outputs/figures/phase5_test_confusion_matrices.png)
+![3. ábra. A makro-F1 és a nyugalmi testhelyzetek F1 értéke a három bemenettel.](figures/channel_ablation.png){width=100%}
 
-Az osztályonkénti és alanyonkénti bontás feltárja a teljesítmény valódi természetét:
+Az eredmény alátámasztja a H2 hipotézist. Gravitációt tartalmazó jel nélkül a fekvés F1 értéke 1,000-ról 0,866-ra esik, a makro-F1 pedig 0,031-gyel csökken. Ha viszont a testgyorsulás marad ki, és csak a teljes gyorsulás és a szögsebesség marad meg, a makro-F1 alig változik (0,949). A háló tehát a teljes gyorsulásból maga is ki tudja nyerni a mozgásból származó részt.
 
-| Tevékenység | LogReg F1 | Random Forest F1 | 1D-CNN (Alap) F1 | **1D-CNN (Hangolt) F1** |
-|---|---:|---:|---:|---:|
-| `WALKING` (`496` ablak) | `0,8887` | `0,7608` | `0,9783` | **`0,9970`** (`496/496` recall) |
-| `WALKING_UPSTAIRS` (`471` ablak) | `0,8986` | `0,7587` | **`0,9641`** | `0,9596` |
-| `WALKING_DOWNSTAIRS` (`420` ablak) | `0,9049` | `0,8349` | **`0,9870`** | `0,9813` (`420/420` recall) |
-| `SITTING` (`491` ablak) | **`0,8533`** | `0,8350` | `0,7966` | `0,7945` |
-| `STANDING` (`532` ablak) | **`0,8860`** | `0,8673` | `0,8323` | `0,8412` |
-| `LAYING` (`537` ablak) | `0,9830` | **`1,0000`** | **`1,0000`** | `0,9963` (`537/537` recall) |
+# 6. Végső kiértékelés a teszthalmazon
 
-![Phase 5 osztályonkénti F1 összehasonlítás](outputs/figures/phase5_test_per_class_f1.png)
+## 6.1. Eredmények
 
-![Phase 5 alanyonkénti Macro-F1 a 9 látatlan tesztalanyon](outputs/figures/phase5_test_per_subject_f1.png)
+A négy kiválasztott modell egyetlen alkalommal futott le a 9 tesztszemély 2 947 ablakán (`src/eval_test.py`). A klasszikus modellek a 2. fázisban kiválasztott beállításokkal tanultak újra a 16 tanítószemélyen. A hálók súlyai a mentett fájlokból töltődtek be, és a szkript ellenőrizte, hogy a mentett standardizálás valóban csak a tanítóadatból készült. A 8. táblázat az eredményeket mutatja.
 
-A részletes hibaelemzés három kulcsfontosságú mintázatot mutat:
-1. **Dinamikus mozgások vs. statikus testhelyzetek:** A hangolt 1D-CNN a három járási osztályban (`0,9596 – 0,9970`) és a fekvésben (`0,9963`) gyakorlatilag hibátlan, messze megelőzve a klasszikus modelleket (`+6%` és `+11%` közötti F1-előny a LogReg-hez képest). Ezzel szemben a `215` összes teszthibából **`174` (`80,9%`) kizárólag `SITTING` ↔ `STANDING` tévesztés** (`103` `SITTING → STANDING`, `71` `STANDING → SITTING`).
-2. **Alanyonkénti eloszlás és kiugró alanyok:** A `9` tesztalanyból `6`-on (`4, 12, 13, 18, 20, 24`) a hangolt 1D-CNN **`0,9559 – 1,0000`** Macro-F1-et ér el (a `12.` és `24.` alanyon `1,0000`-t!). Ugyanakkor a **`9.` (`0,7620`) és `10.` (`0,7491`) alanynál** mindkét CNN teljesítménye visszaesik — a `9.` alanyon a Logisztikus Regresszió (`0,8647`) még felül is múlja őket a `SITTING`/`STANDING` osztályokban (`0,8533` / `0,8860` vs. `0,7945` / `0,8412`). Ennek fizikai oka, hogy mozdulatlan ülés és állás közben a dinamikus jelek közel zérók, így a különböző testalkatú vagy eltérő derék-dőlésszögű felhasználóknál a kis (`16` alanyos) tanulóhalmazon betanított konvolúciós szűrők érzékenyebbek a statikus dőlésszög-eltolódásra (*domain shift*), mint egy egyszerű lineáris kombináció a globális `total_acc` átlagokon.
-3. **Valósidejű mobil inferencia-költség:** A győztes `CompactCNN1D` (`74 582` paraméter, `~292 KB` FP32 súlyméret) egylépéses késleltetése **`0,299 ms` GPU-n** és **`0,387 ms` CPU-n** ablakonként (`0,083 s` a teljes `2 947` ablakos kötegre GPU-n), ami nagyságrendekkel gyorsabb az `1,28 s`-os ablakfrissítési periódusnál.
+Table: 8. táblázat. Eredmények a teszthalmazon (9 személy, 2 947 ablak).
 
----
+| Modell | Validációs makro-F1 | Teszt makro-F1 | Teszt pontosság | Hibás ablakok | Személyenkénti makro-F1 (átlag ± szórás) | Legrosszabb személy |
+|--------------------|-----------:|---------:|-----------:|---------:|-------------------:|---------------:|
+| Logisztikus regresszió | 0,897 | 0,902 | 90,4% | 284 | 0,896 ± 0,067 | 0,733 |
+| Véletlen erdő | 0,891 | 0,843 | 84,6% | 455 | 0,823 ± 0,106 | 0,564 |
+| Alap 1D-CNN | 0,952 | 0,926 | 92,5% | 221 | 0,914 ± 0,090 | 0,721 |
+| Hangolt 1D-CNN | 0,973 | 0,928 | 92,7% | 215 | 0,916 ± 0,093 | 0,749 |
 
-## 7. Tanulságok, korlátok és továbbfejlesztési irányok
+A modellek páronkénti összehasonlítása McNemar-próbával történt. Ez a próba csak azokat az ablakokat nézi, ahol a két modell közül pontosan az egyik téved, és azt vizsgálja, hogy a két irány aránya eltérhet-e véletlenül (9. táblázat).
 
-### 7.1. Hipotézisek értékelése és tudományos tanulságok
+Table: 9. táblázat. McNemar-próbák a 2 947 tesztablakon.
 
-- **$H_1$ (részben / összességében igazolva):** A kompakt 1D-CNN látatlan tesztalanyokon szignifikánsan (`p = 4,31e-5`) felülmúlja a klasszikus alapmodelleket Macro-F1-ben (`0,9283` vs. `0,9024` és `0,8428`), különösen a temporális hullámformát igénylő dinamikus mozgásoknál (`WALKING` `0,9970`, `WALKING_DOWNSTAIRS` `0,9813`). Ugyanakkor a statikus `SITTING`/`STANDING` határon a lineáris `LogReg` meglepően versenyképes maradt (`0,8533`/`0,8860`).
-- **$H_2$ (egyértelműen igazolva):** A `total_acc` gravitációs csatorna nélkül (`6 ch`) a `LAYING` F1 `1,0000`-ról `0,8664`-re zuhant (`-0,0310` Macro-F1 a 5-fold GroupCV-n).
-- **Módszertani tanulságok:**
-  1. A véletlenszerű ablakfelosztás elkerülése és a `StratifiedGroupKFold` használata elengedhetetlen: a `val_fold=0` `0,9725`-ös csúcsa és a `0,9283`-as végső teszteredmény közötti `~4,4` százalékpontos rés pontosan mutatja a `16` tanulóalanyból fakadó alanyközi varianciát, amelyet a `3`-seedes vizsgálat (`0,9561 ± 0,0116`) és az 5-szörös GroupCV (`0,9563 ± 0,0332`) már a teszt megnyitása előtt előre jelzett.
-  2. A Random Forest a `72` összegző jellemzőn tökéletesen (`1,0000`) túltanulta a tanulóalanyokat, ami `0,8428`-as tesztvisszaesést eredményezett — a faalapú modellek sérülékenyek az alanyok közötti eloszlás-eltolódással szemben.
+| Összehasonlítás | Csak a hangolt háló helyes | Csak a másik modell helyes | p-érték |
+|------------------------------------------|-------------------:|-------------------:|-----------------:|
+| Hangolt 1D-CNN és logisztikus regresszió | 174 | 105 | 4,3 · 10^−5^ |
+| Hangolt 1D-CNN és véletlen erdő | 323 | 83 | 1,6 · 10^−34^ |
+| Hangolt 1D-CNN és alap 1D-CNN | 29 | 23 | 0,49 |
 
-### 7.2. Korlátok és jövőbeli fejlesztési irányok
+A hangolt háló mindkét klasszikus modellnél szignifikánsan jobb. A két háló közötti különbség viszont nem szignifikáns: a hangolt háló csak 6-tal kevesebb ablakot téveszt el.
 
-- **Korlátok:** Az UCI HAR adatkészlet mindössze `30` alanyt tartalmaz, fix derék-elhelyezéssel és szűk életkori sávval (`19–48` év), így a modell közvetlenül nem általánosítható zsebben vagy csuklón hordott telefonokra. A `16` alanyos elsődleges tanulóhalmazon lezárt checkpoint helyett (a teszt lezárása után) éles bevetéshez érdemes lenne a végleges hiperparaméterekkel mind a `21` tanulóalanyon átlagolt/ensemble modellt készíteni.
-- **Konkrét műszaki továbbfejlesztés:**
-  1. **Hibrid architektúra (Ignatov, 2018 nyomán):** A 1D-CNN globális pool rétegét összekapcsolni a `total_acc` gravitációs dőlésszög-statisztikáival, egyesítve a CNN dinamikus pontosságát a lineáris gravitációs stabilitással.
-  2. **3D orientációs (`SO(3)`) adatbővítés:** A tanítás során alkalmazott kismértékű véletlen `3D` tengelyforgatással szimulálható az okostelefon egyéni dőlésszög-eltolódása, ami célzottan csökkenthetné a `9.` és `10.` alanyéhoz hasonló `SITTING`↔`STANDING` hibákat.
+## 6.2. Hibaelemzés
 
-### 7.3. Reprodukálhatóság és AI-használati átláthatóság
+![4. ábra. Tévesztési mátrixok a teszthalmazon. A sorok a valódi, az oszlopok a becsült osztályt jelölik, a cellákban az ablakok száma áll.](figures/test_confusion_matrices.png){width=90%}
 
-A teljes kísérleti lánc reprodukálható YAML-konfigurációkkal (`configs/*.yaml`) és moduláris Python-parancsokkal (`src/*.py`), minden futtatási metaadattal az `outputs/*.json` fájlokban rögzítve. A dokumentáció és a kódbázis készítése során mesterséges intelligencia alapú fejlesztői asszisztencia (Antigravity coding agent) került igénybevételre a szkriptek strukturálásához, ellenőrzéséhez és a szövegformázáshoz; minden mérőszám, tenzorméret és grafikon közvetlenül a helyi GPU/CPU futtatások ellenőrzött kimeneteiből származik. *(Adminisztratív megjegyzés: a `CONTEXT.md`-ben rögzített 66% vs. 75%-os megajánlott jegy ponthatár-eltérés miatt a projekt a szigorúbb 75%-os követelményszint teljesítésére törekszik.)*
+Table: 10. táblázat. Osztályonkénti F1 a teszthalmazon.
 
----
+| Tevékenység | Logisztikus regresszió | Véletlen erdő | Alap 1D-CNN | Hangolt 1D-CNN |
+|------------------------|------------------:|------------------:|------------------:|------------------:|
+| Séta | 0,889 | 0,761 | 0,978 | 0,997 |
+| Lépcsőn fel | 0,899 | 0,759 | 0,964 | 0,960 |
+| Lépcsőn le | 0,905 | 0,835 | 0,987 | 0,981 |
+| Ülés | 0,853 | 0,835 | 0,797 | 0,795 |
+| Állás | 0,886 | 0,867 | 0,832 | 0,841 |
+| Fekvés | 0,983 | 1,000 | 1,000 | 0,996 |
 
-## 8. Irodalomjegyzék
+A 4. ábra és a 10. táblázat három fontos dolgot mutat.
 
-1. **Anguita, D., Ghio, A., Oneto, L., Parra, X., & Reyes-Ortiz, J. L. (2013).** *A Public Domain Dataset for Human Activity Recognition Using Smartphones.* Proceedings of the 21st European Symposium on Artificial Neural Networks, Computational Intelligence and Machine Learning (ESANN 2013), Bruges, Belgium, pp. 437–442.
-2. **Anguita, D., Ghio, A., Oneto, L., Parra, X., & Reyes-Ortiz, J. L. (2012).** *Human Activity Recognition on Smartphones Using a Multiclass Hardware-Friendly Support Vector Machine.* International Workshop on Ambient Assisted Living (IWAAL 2012), Lecture Notes in Computer Science, pp. 216–223.
-3. **Ronao, C. A., & Cho, S.-B. (2016).** *Human activity recognition with smartphone sensors using deep learning neural networks.* *Expert Systems with Applications*, Vol. 59, pp. 235–244. DOI: `10.1016/j.eswa.2016.04.032`.
-4. **Ignatov, A. (2018).** *Real-time human activity recognition from accelerometer data using Convolutional Neural Networks.* *Applied Soft Computing*, Vol. 62, pp. 915–922. DOI: `10.1016/j.asoc.2017.09.027`.
-5. **Bishop, C. M. (2023).** *Deep Learning: Foundations and Concepts.* Springer. ISBN `978-3-031-45467-7`.
-6. **Prince, S. J. D. (2024).** *Understanding Deep Learning.* Cambridge, MA: MIT Press.
+Először: a három mozgásos tevékenységnél a hálók F1 értéke 0,96–1,00, ez 0,06–0,11-gyel jobb a logisztikus regressziónál. A hangolt háló mind a 496 séta- és mind a 420 lépcsőn lefelé ablakot helyesen ismerte fel. A fekvést minden modell jól felismeri (0,98 felett).
+
+Másodszor: a hangolt háló 215 hibájából 174 (80,9%) az ülés és az állás felcserélése. 103 ülő ablakot jósolt állásnak, és 71 álló ablakot ülésnek. Ebben a két osztályban a logisztikus regresszió jobb (0,853 és 0,886, szemben a 0,795-tel és 0,841-gyel). Egy lehetséges magyarázat: nyugalomban a mozgásjelek szinte nullák, és a két testhelyzetet csak a telefon kis dőlésszög-különbsége választja el. Ez a dőlés személyenként eltér, a 16 tanítószemély pedig kevés ahhoz, hogy a háló ezt az eltérést megtanulja. Ezt a magyarázatot külön kísérlet nem ellenőrizte.
+
+Harmadszor: a személyek között nagy a különbség (5. ábra). A hangolt háló 9 tesztszemélyből 7-en jobb a logisztikus regressziónál, 6 személyen 0,956 és 1,000 közötti makro-F1-et ér el. A 2. és a 9. személynél viszont a logisztikus regresszió a jobb (0,912 és 0,865, szemben a 0,873-mal és 0,762-vel). A 9. és a 10. személy minden modellnek nehéz.
+
+![5. ábra. Személyenkénti makro-F1 a 9 tesztszemélyen.](figures/test_per_subject_f1.png){width=100%}
+
+## 6.3. Méret és futási idő
+
+A hangolt háló 74 582 paramétere 32 bites lebegőpontos számként kb. 0,3 MB. Egy ablak feldolgozása az RTX 5090 videokártyán 0,30 ms, az asztali processzoron 0,39 ms volt. Új ablak 1,28 másodpercenként érkezik, így a futási idő bőven elég. Telefonon nem történt mérés.
+
+# 7. Tanulságok és korlátok
+
+## 7.1. A hipotézisek értékelése
+
+A H1 hipotézist az eredmények nagyrészt alátámasztják. A hangolt 1D-CNN a teszthalmazon 0,928 makro-F1 értéket ért el, szemben a logisztikus regresszió 0,902-es és a véletlen erdő 0,843-as értékével, és a különbség szignifikáns. Az előny a mozgásos tevékenységekből jön. Az ülés és az állás szétválasztásában a háló nem jobb, hanem gyengébb a logisztikus regressziónál. A hangolás a teszten alig hozott javulást: az alap és a hangolt háló közötti különbség nem szignifikáns.
+
+A H2 hipotézist az elhagyásos vizsgálat alátámasztja: gravitációt tartalmazó jel nélkül a fekvés F1 értéke 1,000-ról 0,866-ra esett.
+
+## 7.2. Módszertani tanulságok
+
+Egyetlen kis validációs halmaz túl kedvező képet adhat. A hangolt háló validációs eredménye 0,973 volt, a teszten 0,928. Ezt a különbséget a három véletlenmaggal végzett futtatás (0,956 ± 0,012) és a keresztvalidáció (0,956 ± 0,033) már a teszt előtt jelezte. A keresztvalidáció tehát megbízhatóbb kép, mint egyetlen, öt személyből álló validációs halmaz. A véletlen erdő a tanítóadatot hibátlanul megtanulta, az új személyeken mégis a leggyengébb volt (0,843): a tanítószemélyek sajátosságait jegyezte meg.
+
+## 7.3. Korlátok
+
+- Az adatkészletben csak 30 személy van, a telefon mindig a derékon volt, a résztvevők 19–48 évesek. Az eredmények nem vihetők át közvetlenül zsebben vagy csuklón hordott eszközre.
+- A végső hálók csak 16 személyen tanultak. Mind a 21 tanítószeméllyel az eredmény valószínűleg javulna, de ez a változat nem készült el.
+- A validációs értékek kissé túl kedvezők, mert a legjobb epoch kiválasztása ugyanazon a validációs adaton történt, amelyen az eredmény is szerepel. A teszteredményekre ez nem vonatkozik.
+- A futási idő mérése asztali gépen történt, telefonon nem.
+
+## 7.4. Továbbfejlesztési lehetőségek
+
+Az ülés és az állás jobb szétválasztására két irány kínálkozik. Az egyik: a háló átlagolt kimenete mellé a teljes gyorsulás egyszerű statisztikái is bekerülnek, Ignatov [6] megoldásához hasonlóan. A másik: tanítás közben az ablakok kis szögben, véletlenszerűen elfordulnak, így a háló különböző telefondőléseket is lát. Végül érdemes lenne a végleges modellt mind a 21 tanítószemélyen betanítani.
+
+## 7.5. Reprodukálhatóság
+
+Minden lépés egy paranccsal futtatható (a parancsokat a `README.md` sorolja fel). A beállítások a `configs` mappa YAML fájljaiban vannak, minden eredmény az `outputs` mappa JSON fájljaiba kerül, az ábrákat pedig a `src/make_figures.py` rajzolja meg ezekből a fájlokból. A dokumentációban szereplő minden szám ezekből a fájlokból származik.
+
+# 8. Irodalomjegyzék
+
+[1] D. Anguita, A. Ghio, L. Oneto, X. Parra, and J. L. Reyes-Ortiz, "Human activity recognition on smartphones using a multiclass hardware-friendly support vector machine," in *Proc. Int. Workshop on Ambient Assisted Living (IWAAL 2012)*, ser. Lecture Notes in Computer Science. Springer, 2012, pp. 216–223.
+
+[2] D. Anguita, A. Ghio, L. Oneto, X. Parra, and J. L. Reyes-Ortiz, "A public domain dataset for human activity recognition using smartphones," in *Proc. 21st Eur. Symp. Artificial Neural Networks, Computational Intelligence and Machine Learning (ESANN 2013)*, Bruges, Belgium, 2013, pp. 437–442.
+
+[3] C. M. Bishop, *Deep Learning: Foundations and Concepts*. Springer, 2023, ISBN 978-3-031-45467-7.
+
+[4] S. J. D. Prince, *Understanding Deep Learning*. Cambridge, MA, USA: MIT Press, 2024.
+
+[5] C. A. Ronao and S.-B. Cho, "Human activity recognition with smartphone sensors using deep learning neural networks," *Expert Systems with Applications*, vol. 59, pp. 235–244, 2016, doi: 10.1016/j.eswa.2016.04.032.
+
+[6] A. Ignatov, "Real-time human activity recognition from accelerometer data using convolutional neural networks," *Applied Soft Computing*, vol. 62, pp. 915–922, 2018, doi: 10.1016/j.asoc.2017.09.027.
