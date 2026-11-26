@@ -48,15 +48,7 @@ def extract_window_summary_features(
     x_raw: np.ndarray,
     stats: Sequence[str] = SUPPORTED_STATS,
 ) -> np.ndarray:
-    """Extract per-channel summary features independently per window.
-
-    Args:
-        x_raw: Inertial tensor of shape ``(N, C, T)``.
-        stats: Summary statistics to compute along the time axis ``T``.
-
-    Returns:
-        Feature matrix of shape ``(N, C * len(stats))`` with ``float32`` dtype.
-    """
+    """Compute ``stats`` along the time axis of ``(N, C, T)``; returns ``(N, C * len(stats))``."""
     if x_raw.ndim != 3:
         raise ValueError(f"Expected 3D tensor (N, C, T), got shape {x_raw.shape}")
     if not stats:
