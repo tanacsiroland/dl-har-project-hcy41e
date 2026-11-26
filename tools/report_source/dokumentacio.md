@@ -6,19 +6,15 @@ lang: hu-HU
 ---
 
 ::: {custom-style="Author"}
-Óbudai Egyetem, Kiberfizikai Rendszerek Intézet
+Óbudai Egyetem Neumann János Informatika Kar
 :::
 
 ::: {custom-style="Author"}
-Oktató: Dr. habil. Dineva Adrienn
+2026/27. tanév, 1. félév, Adattudomány MSc, levelező tagozat
 :::
 
 ::: {custom-style="Author"}
-2026/27. tanév, 1. félév, levelező tagozat
-:::
-
-::: {custom-style="Author"}
-2026\. november 26.
+2026\. december 5.
 :::
 
 ```{=openxml}

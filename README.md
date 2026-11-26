@@ -1,6 +1,6 @@
 # Smartphone activity recognition with a small 1D-CNN
 
-Course project for *Mély gépi tanulás* (NSXMG1HMLF), Óbuda University, Institute of Cyber-Physical Systems, 2026/27 autumn semester.
+Course project for *Mély gépi tanulás* (NSXMG1HMLF), Óbuda University.
 Author: Roland Tanácsi (HCY41E).
 
 The project compares a small 1D convolutional network, trained from scratch on raw smartphone sensor windows (9 channels × 128 samples), with Logistic Regression and Random Forest trained on 72 summary statistics per window. The data is split by person, so every model is tested on people it has never seen. The test set is used once, at the end.
@@ -9,12 +9,12 @@ The project compares a small 1D convolutional network, trained from scratch on r
 
 Test set: 9 people, 2 947 windows. Validation: 5 people. Cross-validation: 5-fold StratifiedGroupKFold over the 21 training people.
 
-| Model | Validation Macro-F1 | 5-fold CV Macro-F1 | Test Macro-F1 | Test accuracy |
-|---|---:|---:|---:|---:|
-| Logistic Regression (C=10, 72 features) | 0.897 | 0.894 ± 0.029 | 0.902 | 90.4% |
-| Random Forest (300 trees, 72 features) | 0.891 | 0.877 ± 0.041 | 0.843 | 84.6% |
-| CompactCNN1D, Phase 3 (38 054 parameters) | 0.952 | 0.946 ± 0.036 | 0.926 | 92.5% |
-| CompactCNN1D, tuned (74 582 parameters) | 0.973 | 0.956 ± 0.033 | 0.928 | 92.7% |
+| Model                                     | Validation Macro-F1 | 5-fold CV Macro-F1 | Test Macro-F1 | Test accuracy |
+| ----------------------------------------- | ------------------: | -----------------: | ------------: | ------------: |
+| Logistic Regression (C=10, 72 features)   |               0.897 |     0.894 ± 0.029 |         0.902 |         90.4% |
+| Random Forest (300 trees, 72 features)    |               0.891 |     0.877 ± 0.041 |         0.843 |         84.6% |
+| CompactCNN1D, Phase 3 (38 054 parameters) |               0.952 |     0.946 ± 0.036 |         0.926 |         92.5% |
+| CompactCNN1D, tuned (74 582 parameters)   |               0.973 |     0.956 ± 0.033 |         0.928 |         92.7% |
 
 ## Setup
 
