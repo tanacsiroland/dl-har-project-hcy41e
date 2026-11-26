@@ -28,7 +28,7 @@ TITLE = (
 AUTHOR = (
     "Tanácsi Roland (HCY41E)\n"
     "Mély gépi tanulás (NSXMG1HMLF), Óbudai Egyetem\n"
-    "2026. november 26."
+    "2026. december 5."
 )
 
 
